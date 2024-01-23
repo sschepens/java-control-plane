@@ -436,7 +436,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
           }
 
           List<String> removedResources = snapshotRemovedResources.stream()
-              .filter(s -> watch.trackedResources().get(s) != null)
+              .filter(s -> watch.trackedResources().containsKey(s))
               .collect(ImmutableList.toImmutableList());
 
           ResponseState responseState = respondDeltaTracked(watch,
@@ -533,6 +533,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
     List<String> removedResources = Stream.concat(watch.trackedResources().keySet().stream(), watch.pendingResources().stream())
         // remove resources for which client has a tracked version or is waiting a response
         .filter(s -> !snapshotResources.containsKey(s))
+        .distinct()
         .collect(ImmutableList.toImmutableList());
 
     return respondDeltaTracked(watch, snapshotResources, removedResources, version, group);
