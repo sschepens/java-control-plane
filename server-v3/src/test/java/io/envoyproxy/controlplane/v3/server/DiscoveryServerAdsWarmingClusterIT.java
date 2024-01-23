@@ -31,12 +31,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.RuleChain;
 import org.testcontainers.containers.Network;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
-import org.testcontainers.shaded.org.apache.commons.lang.math.RandomUtils;
 
 public class DiscoveryServerAdsWarmingClusterIT {
 
@@ -48,7 +48,10 @@ public class DiscoveryServerAdsWarmingClusterIT {
   private static final CountDownLatch onStreamOpenLatch = new CountDownLatch(1);
   private static final CountDownLatch onStreamRequestLatch = new CountDownLatch(1);
   private static final CountDownLatch onStreamResponseLatch = new CountDownLatch(1);
-
+  private static final Network NETWORK = Network.newNetwork();
+  private static final EchoContainer UPSTREAM = new EchoContainer()
+      .withNetwork(NETWORK)
+      .withNetworkAliases("upstream");
   private static final NettyGrpcServerRule ADS = new NettyGrpcServerRule() {
     @Override
     protected void configureServerBuilder(NettyServerBuilder builder) {
@@ -88,41 +91,13 @@ public class DiscoveryServerAdsWarmingClusterIT {
       builder.addService(server.getAggregatedDiscoveryServiceImpl());
     }
   };
-
-  private static final Network NETWORK = Network.newNetwork();
-
   private static final EnvoyContainer ENVOY = new EnvoyContainer(CONFIG, () -> ADS.getServer().getPort())
       .withExposedPorts(LISTENER_PORT)
       .withNetwork(NETWORK);
-
-  private static final EchoContainer UPSTREAM = new EchoContainer()
-      .withNetwork(NETWORK)
-      .withNetworkAliases("upstream");
-
   @ClassRule
   public static final RuleChain RULES = RuleChain.outerRule(UPSTREAM)
       .around(ADS)
       .around(ENVOY);
-
-  @Test
-  public void validateTestRequestToEchoServerViaEnvoy() throws InterruptedException {
-    assertThat(onStreamOpenLatch.await(15, TimeUnit.SECONDS)).isTrue()
-        .overridingErrorMessage("failed to open ADS stream");
-
-    assertThat(onStreamRequestLatch.await(15, TimeUnit.SECONDS)).isTrue()
-        .overridingErrorMessage("failed to receive ADS request");
-
-    assertThat(onStreamResponseLatch.await(15, TimeUnit.SECONDS)).isTrue()
-        .overridingErrorMessage("failed to send ADS response");
-
-    String baseUri = String.format("http://%s:%d", ENVOY.getContainerIpAddress(), ENVOY.getMappedPort(LISTENER_PORT));
-
-    await().atMost(5, TimeUnit.SECONDS).ignoreExceptions().untilAsserted(
-        () -> given().baseUri(baseUri).contentType(ContentType.TEXT)
-            .when().get("/")
-            .then().statusCode(200)
-            .and().body(containsString(UPSTREAM.response)));
-  }
 
   private static void createSnapshotWithWorkingClusterWithTheSameEdsVersion(DiscoveryRequest request,
                                                                             ExecutorService executorService) {
@@ -156,7 +131,7 @@ public class DiscoveryServerAdsWarmingClusterIT {
 
     Cluster cluster = Cluster.newBuilder()
         .setName(clusterName)
-        .setConnectTimeout(Durations.fromSeconds(RandomUtils.nextInt(5)))
+        .setConnectTimeout(Durations.fromSeconds(RandomUtils.nextInt(0, 5)))
         // we are enabling HTTP2 - communication with cluster won't work
         .setHttp2ProtocolOptions(Http2ProtocolOptions.newBuilder().build())
         .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
@@ -186,6 +161,25 @@ public class DiscoveryServerAdsWarmingClusterIT {
         "2");
   }
 
+  @Test
+  public void validateTestRequestToEchoServerViaEnvoy() throws InterruptedException {
+    assertThat(onStreamOpenLatch.await(15, TimeUnit.SECONDS)).isTrue()
+        .overridingErrorMessage("failed to open ADS stream");
+
+    assertThat(onStreamRequestLatch.await(15, TimeUnit.SECONDS)).isTrue()
+        .overridingErrorMessage("failed to receive ADS request");
+
+    assertThat(onStreamResponseLatch.await(15, TimeUnit.SECONDS)).isTrue()
+        .overridingErrorMessage("failed to send ADS response");
+
+    String baseUri = String.format("http://%s:%d", ENVOY.getContainerIpAddress(), ENVOY.getMappedPort(LISTENER_PORT));
+
+    await().atMost(5, TimeUnit.SECONDS).ignoreExceptions().untilAsserted(
+        () -> given().baseUri(baseUri).contentType(ContentType.TEXT)
+            .when().get("/")
+            .then().statusCode(200)
+            .and().body(containsString(UPSTREAM.response)));
+  }
 
   /**
    * Code has been copied from io.envoyproxy.controlplane.cache.SimpleCache to show specific case when

@@ -5,16 +5,20 @@
     <parent>
         <artifactId>java-control-plane</artifactId>
         <groupId>io.envoyproxy.controlplane</groupId>
-        <version>0.1.25-SNAPSHOT</version>
+        <version>0.1.26-SNAPSHOT</version>
     </parent>
 
     <artifactId>server</artifactId>
+
+    <properties>
+        <checkstyle.skip>true</checkstyle.skip>
+    </properties>
 
     <dependencies>
         <dependency>
             <groupId>io.envoyproxy.controlplane</groupId>
             <artifactId>cache</artifactId>
-            <version>0.1.25-SNAPSHOT</version>
+            <version>0.1.26-SNAPSHOT</version>
         </dependency>
 
         <dependency>

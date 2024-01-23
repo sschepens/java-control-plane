@@ -11,6 +11,7 @@ import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -93,6 +94,10 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
       version = "";
     } else {
       version = latestVersion(requestTypeUrl);
+    }
+
+    if (request.getInitialResourceVersionsCount() > 0) {
+      updateTrackedResources(requestTypeUrl, request.getInitialResourceVersionsMap(), Collections.emptyList());
     }
 
     // always update subscriptions

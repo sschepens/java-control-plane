@@ -23,6 +23,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Stream;
 import javax.annotation.concurrent.GuardedBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -529,9 +530,8 @@ public class SimpleCache<T> implements SnapshotCache<T> {
                                             Map<String, SnapshotResource<?>> snapshotResources,
                                             String version,
                                             T group) {
-    List<String> removedResources = watch.trackedResources().keySet()
-        .stream()
-        // remove resources for which client has a tracked version
+    List<String> removedResources = Stream.concat(watch.trackedResources().keySet().stream(), watch.pendingResources().stream())
+        // remove resources for which client has a tracked version or is waiting a response
         .filter(s -> !snapshotResources.containsKey(s))
         .collect(ImmutableList.toImmutableList());
 
