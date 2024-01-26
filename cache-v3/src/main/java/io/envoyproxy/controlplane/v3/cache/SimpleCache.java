@@ -234,8 +234,17 @@ public class SimpleCache<T> implements SnapshotCache<T> {
 
       // If the requested version is up-to-date or missing a response, leave an open watch.
       if (version.equals(requesterVersion)) {
-        // If the request is not wildcard, we have pending resources and we have them, we should respond immediately.
-        if (!isWildcard && watch.pendingResources().size() != 0) {
+        if (hasClusterChanged && request.getTypeUrl().equals(Resources.ENDPOINT_TYPE_URL)) {
+          ResponseState responseState = respondDeltaTracked(
+              watch,
+              snapshot.resources(request.getTypeUrl()),
+              version,
+              group);
+          if (responseState.equals(ResponseState.RESPONDED) || responseState.equals(ResponseState.CANCELLED)) {
+            return watch;
+          }
+        } else if (!isWildcard && watch.pendingResources().size() != 0) {
+          // If the request is not wildcard, we have pending resources and we have them, we should respond immediately.
           // If any of the pending resources are in the snapshot respond immediately. If not we'll fall back to
           // version comparisons.
           Map<String, SnapshotResource<?>> resources = snapshot.resources(request.getTypeUrl());
@@ -245,16 +254,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
               .collect(ImmutableMap.toImmutableMap(Function.identity(), resources::get));
           ResponseState responseState = respondDelta(watch,
               requestedResources,
-              Collections.emptyList(),
-              version,
-              group);
-          if (responseState.equals(ResponseState.RESPONDED) || responseState.equals(ResponseState.CANCELLED)) {
-            return watch;
-          }
-        } else if (hasClusterChanged && request.getTypeUrl().equals(Resources.ENDPOINT_TYPE_URL)) {
-          ResponseState responseState = respondDeltaTracked(
-              watch,
-              snapshot.resources(request.getTypeUrl()),
+              findRemovedResources(watch, resources),
               version,
               group);
           if (responseState.equals(ResponseState.RESPONDED) || responseState.equals(ResponseState.CANCELLED)) {
@@ -419,11 +419,6 @@ public class SimpleCache<T> implements SnapshotCache<T> {
           })
           .collect(ImmutableMap.toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
 
-      Set<String> snapshotRemovedResources = previousResources.keySet()
-          .stream()
-          .filter(s -> !snapshotResources.containsKey(s))
-          .collect(ImmutableSet.toImmutableSet());
-
       status.deltaWatchesRemoveIf((id, watch) -> {
         String version = snapshot.version(watch.request().getTypeUrl());
 
@@ -435,13 +430,9 @@ public class SimpleCache<T> implements SnapshotCache<T> {
                 version);
           }
 
-          List<String> removedResources = snapshotRemovedResources.stream()
-              .filter(s -> watch.trackedResources().containsKey(s))
-              .collect(ImmutableList.toImmutableList());
-
           ResponseState responseState = respondDeltaTracked(watch,
               snapshotChangedResources,
-              removedResources,
+              findRemovedResources(watch, snapshotResources),
               version,
               group);
           // Discard the watch if it was responded or cancelled.
@@ -453,6 +444,14 @@ public class SimpleCache<T> implements SnapshotCache<T> {
         return false;
       });
     }
+  }
+
+  private List<String> findRemovedResources(DeltaWatch watch, Map<String, SnapshotResource<?>> snapshotResources) {
+    // remove resources for which client has a tracked version or is waiting a response
+    return Stream.concat(watch.trackedResources().keySet().stream(), watch.pendingResources().stream())
+        .filter(s -> !snapshotResources.containsKey(s))
+        .distinct()
+        .collect(ImmutableList.toImmutableList());
   }
 
   private Response createResponse(DiscoveryRequest request,
@@ -530,13 +529,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
                                             Map<String, SnapshotResource<?>> snapshotResources,
                                             String version,
                                             T group) {
-    List<String> removedResources = Stream.concat(watch.trackedResources().keySet().stream(), watch.pendingResources().stream())
-        // remove resources for which client has a tracked version or is waiting a response
-        .filter(s -> !snapshotResources.containsKey(s))
-        .distinct()
-        .collect(ImmutableList.toImmutableList());
-
-    return respondDeltaTracked(watch, snapshotResources, removedResources, version, group);
+    return respondDeltaTracked(watch, snapshotResources, findRemovedResources(watch, snapshotResources), version, group);
   }
 
   private ResponseState respondDeltaTracked(DeltaWatch watch,
