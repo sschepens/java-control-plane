@@ -1,9 +1,6 @@
 package io.envoyproxy.controlplane.v3.cache;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest;
@@ -11,6 +8,7 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -23,6 +21,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.concurrent.GuardedBy;
 import org.slf4j.Logger;
@@ -122,7 +121,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
       Watch watch = new Watch(ads, request, responseConsumer);
 
       if (snapshot != null) {
-        Set<String> requestedResources = ImmutableSet.copyOf(request.getResourceNamesList());
+        Set<String> requestedResources = new HashSet<>(request.getResourceNamesList());
 
         // If the request is asking for resources we haven't sent to the proxy yet, see if we have additional resources.
         if (!knownResourceNames.equals(requestedResources)) {
@@ -211,8 +210,8 @@ public class SimpleCache<T> implements SnapshotCache<T> {
       Snapshot snapshot = snapshots.get(group);
       String version = snapshot == null ? "" : snapshot.version(request.getTypeUrl());
       DeltaWatch watch = new DeltaWatch(request,
-          ImmutableMap.copyOf(resourceVersions),
-          ImmutableSet.copyOf(pendingResources),
+          Collections.unmodifiableMap(resourceVersions),
+          Collections.unmodifiableSet(pendingResources),
           requesterVersion,
           isWildcard,
           responseConsumer);
@@ -251,7 +250,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
           Map<String, SnapshotResource<?>> requestedResources = watch.pendingResources()
               .stream()
               .filter(resources::containsKey)
-              .collect(ImmutableMap.toImmutableMap(Function.identity(), resources::get));
+              .collect(Collectors.toUnmodifiableMap(Function.identity(), resources::get));
           ResponseState responseState = respondDelta(watch,
               requestedResources,
               findRemovedResources(watch, resources),
@@ -326,7 +325,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
    */
   @Override
   public Collection<T> groups() {
-    return ImmutableSet.copyOf(statuses.keySet());
+    return Collections.unmodifiableSet(statuses.keySet());
   }
 
   /**
@@ -417,7 +416,12 @@ public class SimpleCache<T> implements SnapshotCache<T> {
             SnapshotResource<?> snapshotResource = previousResources.get(entry.getKey());
             return snapshotResource == null || !snapshotResource.version().equals(entry.getValue().version());
           })
-          .collect(ImmutableMap.toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
+          .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+
+      Set<String> snapshotRemovedResources = previousResources.keySet()
+          .stream()
+          .filter(s -> !snapshotResources.containsKey(s))
+          .collect(Collectors.toSet());
 
       status.deltaWatchesRemoveIf((id, watch) -> {
         String version = snapshot.version(watch.request().getTypeUrl());
@@ -430,9 +434,13 @@ public class SimpleCache<T> implements SnapshotCache<T> {
                 version);
           }
 
+          List<String> removedResources = snapshotRemovedResources.stream()
+              .filter(s -> watch.trackedResources().containsKey(s))
+              .toList();
+
           ResponseState responseState = respondDeltaTracked(watch,
               snapshotChangedResources,
-              findRemovedResources(watch, snapshotResources),
+              removedResources,
               version,
               group);
           // Discard the watch if it was responded or cancelled.
@@ -451,7 +459,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
     return Stream.concat(watch.trackedResources().keySet().stream(), watch.pendingResources().stream())
         .filter(s -> !snapshotResources.containsKey(s))
         .distinct()
-        .collect(ImmutableList.toImmutableList());
+        .toList();
   }
 
   private Response createResponse(DiscoveryRequest request,
@@ -461,12 +469,12 @@ public class SimpleCache<T> implements SnapshotCache<T> {
         ? resources.values()
         .stream()
         .map(SnapshotResource::resource)
-        .collect(ImmutableList.toImmutableList())
+        .toList()
         : request.getResourceNamesList().stream()
         .map(resources::get)
         .filter(Objects::nonNull)
         .map(SnapshotResource::resource)
-        .collect(ImmutableList.toImmutableList());
+        .toList();
 
     return Response.create(request, filtered, version);
   }
@@ -477,7 +485,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
     if (!watch.request().getResourceNamesList().isEmpty() && watch.ads()) {
       Collection<String> missingNames = watch.request().getResourceNamesList().stream()
           .filter(name -> !snapshotResources.containsKey(name))
-          .collect(ImmutableList.toImmutableList());
+          .toList();
 
       if (!missingNames.isEmpty()) {
         LOGGER.info(
@@ -551,7 +559,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
           }
           return !entry.getValue().version().equals(resourceVersion);
         })
-        .collect(ImmutableMap.toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
+        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
 
     return respondDelta(watch, resources, removedResources, version, group);
   }
