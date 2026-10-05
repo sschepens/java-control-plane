@@ -227,6 +227,45 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
   }
 
   private void send(DeltaResponse response, String typeUrl) {
+    try {
+      doSend(response, typeUrl);
+    } catch (Throwable t) {
+      if (t instanceof StatusRuntimeException
+          && Status.CANCELLED.getCode().equals(((StatusRuntimeException) t).getStatus().getCode())) {
+        // the client went away, the stream is already being torn down
+        return;
+      }
+      failStream(typeUrl, t);
+      if (t instanceof Error) {
+        throw (Error) t;
+      }
+    }
+  }
+
+  /**
+   * Closes the stream after a response could not be built or written. Without this the stream would stay open for
+   * that type with no watch, or with a response that is never acked, and the client would silently stop receiving
+   * updates until the connection is recycled. Closing it makes the client reconnect and resync right away.
+   */
+  private void failStream(String typeUrl, Throwable cause) {
+    LOGGER.error("[{}] failed to send {} response, closing stream", streamId, typeUrl, cause);
+    try {
+      discoverySever.callbacks.forEach(cb -> cb.onStreamCloseWithError(streamId, defaultTypeUrl, cause));
+    } catch (RuntimeException e) {
+      LOGGER.error("[{}] stream close callback failed", streamId, e);
+    }
+    try {
+      closeWithError(Status.INTERNAL
+          .withDescription("failed to send " + typeUrl + " response: " + cause.getClass().getName())
+          .withCause(cause)
+          .asException());
+    } catch (RuntimeException e) {
+      LOGGER.error("[{}] failed to close stream", streamId, e);
+      cancel();
+    }
+  }
+
+  private void doSend(DeltaResponse response, String typeUrl) {
     String nonce = Long.toString(streamNonceUpdater.getAndIncrement(this));
 
     DeltaDiscoveryResponse discoveryResponse = DeltaDiscoveryResponse.newBuilder()
@@ -269,13 +308,7 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
     setLatestVersion(typeUrl, response.version());
     synchronized (responseObserver) {
       if (!isClosing) {
-        try {
-          responseObserver.onNext(discoveryResponse);
-        } catch (StatusRuntimeException e) {
-          if (!Status.CANCELLED.getCode().equals(e.getStatus().getCode())) {
-            throw e;
-          }
-        }
+        responseObserver.onNext(discoveryResponse);
       }
     }
   }

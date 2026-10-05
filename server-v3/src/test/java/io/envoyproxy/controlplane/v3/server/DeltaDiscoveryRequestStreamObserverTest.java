@@ -2,7 +2,6 @@ package io.envoyproxy.controlplane.v3.server;
 
 import static io.envoyproxy.controlplane.v3.cache.Resources.ROUTE_TYPE_URL;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
 
 import com.google.rpc.Status;
 import io.envoyproxy.controlplane.v3.cache.SimpleCache;
@@ -43,6 +42,8 @@ public class DeltaDiscoveryRequestStreamObserverTest {
 
   private final boolean ads;
   private final List<DeltaDiscoveryResponse> responses = new ArrayList<>();
+  private final List<Throwable> errors = new ArrayList<>();
+  private volatile RuntimeException sendFailure;
   private ScheduledExecutorService executor;
   private SimpleCache<String> cache;
   private DeltaDiscoveryRequestStreamObserver observer;
@@ -56,29 +57,38 @@ public class DeltaDiscoveryRequestStreamObserverTest {
     executor = Executors.newSingleThreadScheduledExecutor();
     cache = new SimpleCache<>(node -> "group");
     cache.setSnapshot("group", snapshot(RESOURCE_VERSION, OTHER_RESOURCE_VERSION, "snapshot-v1"));
-    DiscoveryServer server = new DiscoveryServer(cache);
+    observer = newObserver(new DiscoveryServer(cache));
+  }
+
+  private DeltaDiscoveryRequestStreamObserver newObserver(DiscoveryServer server) {
     StreamObserver<DeltaDiscoveryResponse> responseObserver = new StreamObserver<DeltaDiscoveryResponse>() {
       @Override
       public void onNext(DeltaDiscoveryResponse response) {
+        RuntimeException failure = sendFailure;
+        if (failure != null) {
+          sendFailure = null;
+          throw failure;
+        }
         responses.add(response);
       }
 
       @Override
       public void onError(Throwable error) {
-        fail("unexpected stream error", error);
+        errors.add(error);
       }
 
       @Override
       public void onCompleted() {
       }
     };
-    observer = ads
+    return ads
         ? new AdsDeltaDiscoveryRequestStreamObserver(responseObserver, 1, executor, server)
         : new XdsDeltaDiscoveryRequestStreamObserver(ROUTE_TYPE_URL, responseObserver, 1, executor, server);
   }
 
   @After
   public void tearDown() {
+    assertThat(errors).as("unexpected stream errors").isEmpty();
     observer.onCompleted();
     executor.shutdownNow();
   }
@@ -221,6 +231,60 @@ public class DeltaDiscoveryRequestStreamObserverTest {
     assertThat(observer.resourceVersions(ROUTE_TYPE_URL)).containsOnlyKeys(RESOURCE_NAME);
     assertThat(observer.pendingResources(ROUTE_TYPE_URL)).isEmpty();
     assertThat(responses).hasSize(1);
+  }
+
+  @Test
+  public void failureWhileWritingAResponseClosesTheStream() throws Exception {
+    sendFailure = new IllegalStateException("transport exploded");
+
+    send(request().addResourceNamesSubscribe(RESOURCE_NAME));
+
+    assertThat(responses).isEmpty();
+    assertThat(errors).hasSize(1);
+    io.grpc.Status status = io.grpc.Status.fromThrowable(errors.remove(0));
+    assertThat(status.getCode()).isEqualTo(io.grpc.Status.Code.INTERNAL);
+    assertThat(status.getDescription()).contains(ROUTE_TYPE_URL).contains("IllegalStateException");
+
+    // the stream is closed: a new snapshot that would normally produce a response writes nothing
+    cache.setSnapshot("group", snapshot("resource-v2", OTHER_RESOURCE_VERSION, "snapshot-v2"));
+    flush();
+    assertThat(responses).isEmpty();
+  }
+
+  @Test
+  public void failureWhileBuildingAResponseClosesTheStreamAndNotifiesCallbacks() throws Exception {
+    List<Long> closedStreams = new ArrayList<>();
+    DiscoveryServerCallbacks callbacks = new DiscoveryServerCallbacks() {
+      @Override
+      public void onStreamDeltaResponse(long streamId, DeltaDiscoveryRequest request,
+                                        DeltaDiscoveryResponse response) {
+        throw new IllegalStateException("callback exploded");
+      }
+
+      @Override
+      public void onStreamCloseWithError(long streamId, String typeUrl, Throwable error) {
+        closedStreams.add(streamId);
+      }
+    };
+    observer = newObserver(new DiscoveryServer(callbacks, cache));
+
+    send(request().addResourceNamesSubscribe(RESOURCE_NAME));
+
+    assertThat(responses).isEmpty();
+    assertThat(observer.responseCount(ROUTE_TYPE_URL)).as("nothing is left pending an ack").isZero();
+    assertThat(closedStreams).containsExactly(1L);
+    assertThat(errors).hasSize(1);
+    assertThat(io.grpc.Status.fromThrowable(errors.remove(0)).getCode()).isEqualTo(io.grpc.Status.Code.INTERNAL);
+  }
+
+  @Test
+  public void cancelledClientDoesNotCloseTheStreamAgain() throws Exception {
+    sendFailure = io.grpc.Status.CANCELLED.asRuntimeException();
+
+    send(request().addResourceNamesSubscribe(RESOURCE_NAME));
+
+    assertThat(responses).isEmpty();
+    assertThat(errors).isEmpty();
   }
 
   private static Snapshot snapshot(String resourceVersion, String otherResourceVersion, String snapshotVersion) {
