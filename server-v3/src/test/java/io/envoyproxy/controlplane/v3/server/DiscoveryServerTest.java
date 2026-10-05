@@ -15,6 +15,7 @@ import io.envoyproxy.controlplane.v3.cache.DeltaResponse;
 import io.envoyproxy.controlplane.v3.cache.DeltaWatch;
 import io.envoyproxy.controlplane.v3.cache.Resources;
 import io.envoyproxy.controlplane.v3.cache.Response;
+import io.envoyproxy.controlplane.v3.cache.TrackedResources;
 import io.envoyproxy.controlplane.v3.cache.TestResources;
 import io.envoyproxy.controlplane.v3.cache.Watch;
 import io.envoyproxy.controlplane.v3.cache.WatchCancelledException;
@@ -1098,8 +1099,7 @@ public class DiscoveryServerTest {
     @Override
     public DeltaWatch createDeltaWatch(DeltaDiscoveryRequest request,
                                        String currentVersion,
-                                       Map<String, String> resourceVersions,
-                                       Set<String> pendingResources,
+                                       TrackedResources trackedResources,
                                        boolean isWildcard,
                                        Consumer<DeltaResponse> responseConsumer,
                                        boolean hasClusterChanged) {

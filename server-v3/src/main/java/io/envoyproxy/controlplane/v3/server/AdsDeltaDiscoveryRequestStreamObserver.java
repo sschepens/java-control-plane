@@ -4,20 +4,14 @@ import static io.envoyproxy.controlplane.v3.server.DiscoveryServer.ANY_TYPE_URL;
 
 import io.envoyproxy.controlplane.v3.cache.DeltaWatch;
 import io.envoyproxy.controlplane.v3.cache.Resources;
+import io.envoyproxy.controlplane.v3.cache.TrackedResources;
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryResponse;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.Supplier;
 
 /**
  * {@code AdsDiscoveryRequestStreamObserver} is an implementation of {@link DiscoveryRequestStreamObserver} tailored for
@@ -27,10 +21,8 @@ public class AdsDeltaDiscoveryRequestStreamObserver extends DeltaDiscoveryReques
   private final ConcurrentMap<String, DeltaWatch> watches;
   private final ConcurrentMap<String, String> latestVersion;
   private final ConcurrentMap<String, ConcurrentHashMap<String, LatestDeltaDiscoveryResponse>> responses;
-  // tracked and pending resources are always accessed in the observer
-  // so they are safe from race, no need for concurrent map
-  private final Map<String, Map<String, String>> trackedResourceMap;
-  private final Map<String, Set<String>> pendingResourceMap;
+  // mutated by this stream and read by the cache's snapshot thread, both under each entry's monitor
+  private final ConcurrentMap<String, TrackedResources> trackedResources;
 
   AdsDeltaDiscoveryRequestStreamObserver(StreamObserver<DeltaDiscoveryResponse> responseObserver,
                                          long streamId,
@@ -40,8 +32,7 @@ public class AdsDeltaDiscoveryRequestStreamObserver extends DeltaDiscoveryReques
     this.watches = new ConcurrentHashMap<>(Resources.TYPE_URLS.size());
     this.latestVersion = new ConcurrentHashMap<>(Resources.TYPE_URLS.size());
     this.responses = new ConcurrentHashMap<>(Resources.TYPE_URLS.size());
-    this.trackedResourceMap = new HashMap<>(Resources.TYPE_URLS.size());
-    this.pendingResourceMap = new HashMap<>(Resources.TYPE_URLS.size());
+    this.trackedResources = new ConcurrentHashMap<>(Resources.TYPE_URLS.size());
   }
 
   @Override
@@ -102,16 +93,6 @@ public class AdsDeltaDiscoveryRequestStreamObserver extends DeltaDiscoveryReques
   }
 
   @Override
-  Map<String, String> resourceVersions(String typeUrl) {
-    return trackedResourceMap.getOrDefault(typeUrl, Collections.emptyMap());
-  }
-
-  @Override
-  Set<String> pendingResources(String typeUrl) {
-    return pendingResourceMap.getOrDefault(typeUrl, Collections.emptySet());
-  }
-
-  @Override
   boolean isWildcard(String typeUrl) {
     return typeUrl.equals(Resources.CLUSTER_TYPE_URL)
         || typeUrl.equals(Resources.LISTENER_TYPE_URL)
@@ -119,40 +100,20 @@ public class AdsDeltaDiscoveryRequestStreamObserver extends DeltaDiscoveryReques
   }
 
   @Override
-  void updateTrackedResources(String typeUrl,
-                              Map<String, String> resourcesVersions,
-                              List<String> removedResources) {
-
-    Map<String, String> trackedResources = trackedResourceMap.computeIfAbsent(typeUrl, s -> new HashMap<>());
-    Set<String> pendingResources = pendingResourceMap.computeIfAbsent(typeUrl, s -> new HashSet<>());
-    resourcesVersions.forEach((k, v) -> {
-      trackedResources.put(k, v);
-      pendingResources.remove(k);
-    });
-    removedResources.forEach(trackedResources::remove);
-    pendingResources.removeAll(removedResources);
+  TrackedResources trackedResources(String typeUrl) {
+    return trackedResources.computeIfAbsent(typeUrl, s -> new TrackedResources());
   }
 
   @Override
-  void updateSubscriptions(String typeUrl, List<String> resourceNamesSubscribe, List<String> resourceNamesUnsubscribe) {
-    Map<String, String> trackedResources = trackedResourceMap.computeIfAbsent(typeUrl, s -> new HashMap<>());
-    Set<String> pendingResources = pendingResourceMap.computeIfAbsent(typeUrl, s -> new HashSet<>());
-    // unsubscribe first
-    resourceNamesUnsubscribe.forEach(s -> {
-      trackedResources.remove(s);
-      pendingResources.remove(s);
-    });
-    pendingResources.addAll(resourceNamesSubscribe);
+  void cancelWatch(String typeUrl) {
+    DeltaWatch watch = watches.get(typeUrl);
+    if (watch != null) {
+      watch.cancel();
+    }
   }
 
   @Override
-  void computeWatch(String typeUrl, Supplier<DeltaWatch> watchCreator) {
-    watches.compute(typeUrl, (s, watch) -> {
-      if (watch != null) {
-        watch.cancel();
-      }
-
-      return watchCreator.get();
-    });
+  void setWatch(String typeUrl, DeltaWatch watch) {
+    watches.put(typeUrl, watch);
   }
 }

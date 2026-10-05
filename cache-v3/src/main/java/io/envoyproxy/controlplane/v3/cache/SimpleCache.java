@@ -198,11 +198,22 @@ public class SimpleCache<T> implements SnapshotCache<T> {
   @Override
   public DeltaWatch createDeltaWatch(DeltaDiscoveryRequest request,
                                      String requesterVersion,
-                                     Map<String, String> resourceVersions,
-                                     Set<String> pendingResources,
+                                     TrackedResources trackedResources,
                                      boolean isWildcard,
                                      Consumer<DeltaResponse> responseConsumer,
                                      boolean hasClusterChanged) {
+    // The tracked resources are also read by setSnapshot and mutated by the owning stream, always under their
+    // lock. Take it before the cache lock: setSnapshot never holds the write lock while taking it.
+    return trackedResources.locked(() -> createDeltaWatchLocked(request, requesterVersion, trackedResources,
+        isWildcard, responseConsumer, hasClusterChanged));
+  }
+
+  private DeltaWatch createDeltaWatchLocked(DeltaDiscoveryRequest request,
+                                            String requesterVersion,
+                                            TrackedResources trackedResources,
+                                            boolean isWildcard,
+                                            Consumer<DeltaResponse> responseConsumer,
+                                            boolean hasClusterChanged) {
     T group = groups.hash(request.getNode());
     // even though we're modifying, we take a readLock to allow multiple watches to be created in parallel since it
     // doesn't conflict
@@ -214,21 +225,16 @@ public class SimpleCache<T> implements SnapshotCache<T> {
 
       Snapshot snapshot = snapshots.get(group);
       String version = snapshot == null ? "" : snapshot.version(request.getTypeUrl());
-      DeltaWatch watch = new DeltaWatch(request,
-          Collections.unmodifiableMap(resourceVersions),
-          Collections.unmodifiableSet(pendingResources),
-          requesterVersion,
-          isWildcard,
-          responseConsumer);
+      DeltaWatch watch = new DeltaWatch(request, trackedResources, requesterVersion, isWildcard, responseConsumer);
 
       // If no snapshot, leave an open watch.
       if (snapshot == null) {
         long watchId = setDeltaWatch(status, watch);
         if (LOGGER.isDebugEnabled()) {
-          LOGGER.debug("open watch {} for {}[{}] from node {} for version {}",
+          LOGGER.debug("open watch {} for {} ({} tracked) from node {} for version {}",
               watchId,
               request.getTypeUrl(),
-              String.join(", ", watch.trackedResources().keySet()),
+              watch.trackedResources().size(),
               group,
               requesterVersion);
         }
@@ -268,10 +274,10 @@ public class SimpleCache<T> implements SnapshotCache<T> {
 
         long watchId = setDeltaWatch(status, watch);
         if (LOGGER.isDebugEnabled()) {
-          LOGGER.debug("open watch {} for {}[{}] from node {} for version {}",
+          LOGGER.debug("open watch {} for {} ({} tracked) from node {} for version {}",
               watchId,
               request.getTypeUrl(),
-              String.join(", ", watch.trackedResources().keySet()),
+              watch.trackedResources().size(),
               group,
               requesterVersion);
         }
@@ -290,10 +296,10 @@ public class SimpleCache<T> implements SnapshotCache<T> {
 
       long watchId = setDeltaWatch(status, watch);
       if (LOGGER.isDebugEnabled()) {
-        LOGGER.debug("did not respond immediately, leaving open watch {} for {}[{}] from node {} for version {}",
+        LOGGER.debug("did not respond immediately, leaving open watch {} for {} ({} tracked) from node {} for version {}",
             watchId,
             request.getTypeUrl(),
-            String.join(", ", watch.trackedResources().keySet()),
+            watch.trackedResources().size(),
             group,
             requesterVersion);
       }
@@ -434,35 +440,49 @@ public class SimpleCache<T> implements SnapshotCache<T> {
           .filter(s -> !snapshotResources.containsKey(s))
           .collect(Collectors.toSet());
 
-      status.deltaWatchesRemoveIf((id, watch) -> {
-        String version = snapshot.version(watch.request().getTypeUrl());
-
-        if (!watch.version().equals(version)) {
-          if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("responding to open watch {}[{}] with new version {}",
-                id,
-                String.join(", ", watch.trackedResources().keySet()),
-                version);
-          }
-
-          List<String> removedResources = snapshotRemovedResources.stream()
-              .filter(s -> watch.trackedResources().containsKey(s))
-              .toList();
-
-          ResponseState responseState = respondDeltaTracked(watch,
-              snapshotChangedResources,
-              removedResources,
-              version,
-              group);
-          // Discard the watch if it was responded or cancelled.
-          // A new watch will be created for future snapshots once envoy ACKs the response.
-          return ResponseState.RESPONDED.equals(responseState) || ResponseState.CANCELLED.equals(responseState);
-        }
-
-        // Do not discard the watch. The request version is the same as the snapshot version, so we wait to respond.
-        return false;
-      });
+      // The stream mutates the tracked resources under the same lock, and cancels the watch before doing so.
+      status.deltaWatchesRemoveIf((id, watch) -> watch.locked(
+          () -> respondDeltaWatch(id, watch, snapshot, snapshotChangedResources, snapshotRemovedResources, group)));
     }
+  }
+
+  /**
+   * Evaluates an open delta watch against a new snapshot. Must run inside {@link DeltaWatch#locked}.
+   *
+   * @return whether the watch should be discarded
+   */
+  private boolean respondDeltaWatch(long id,
+                                    DeltaWatch watch,
+                                    Snapshot snapshot,
+                                    Map<String, SnapshotResource<?>> snapshotChangedResources,
+                                    Set<String> snapshotRemovedResources,
+                                    T group) {
+    String version = snapshot.version(watch.request().getTypeUrl());
+
+    if (!watch.version().equals(version)) {
+      if (LOGGER.isDebugEnabled()) {
+        LOGGER.debug("responding to open watch {} ({} tracked) with new version {}",
+            id,
+            watch.trackedResources().size(),
+            version);
+      }
+
+      List<String> removedResources = snapshotRemovedResources.stream()
+          .filter(s -> watch.trackedResources().containsKey(s))
+          .toList();
+
+      ResponseState responseState = respondDeltaTracked(watch,
+          snapshotChangedResources,
+          removedResources,
+          version,
+          group);
+      // Discard the watch if it was responded or cancelled.
+      // A new watch will be created for future snapshots once envoy ACKs the response.
+      return ResponseState.RESPONDED.equals(responseState) || ResponseState.CANCELLED.equals(responseState);
+    }
+
+    // Do not discard the watch. The request version is the same as the snapshot version, so we wait to respond.
+    return false;
   }
 
   private List<String> findRemovedResources(DeltaWatch watch, Map<String, SnapshotResource<?>> snapshotResources) {

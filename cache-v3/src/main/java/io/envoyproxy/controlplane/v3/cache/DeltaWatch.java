@@ -1,10 +1,12 @@
 package io.envoyproxy.controlplane.v3.cache;
 
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * {@code Watch} is a dedicated stream of configuration resources produced by the configuration cache and consumed by
@@ -17,6 +19,7 @@ public class DeltaWatch {
   private final Consumer<DeltaResponse> responseConsumer;
   private final Map<String, String> resourceVersions;
   private final Set<String> pendingResources;
+  private final TrackedResources trackedResources;
   private final boolean isWildcard;
   private final String version;
   private volatile int isCancelled = 0;
@@ -25,19 +28,21 @@ public class DeltaWatch {
   /**
    * Construct a watch.
    * @param request          the original request for the watch
+   * @param trackedResources the resources tracked by the stream; read through {@link #trackedResources()} and
+   *                         {@link #pendingResources()} inside {@link #locked(Supplier)}
    * @param version          indicates the stream current version
    * @param isWildcard       indicates if the stream is in wildcard mode
    * @param responseConsumer handler for outgoing response messages
    */
   public DeltaWatch(DeltaDiscoveryRequest request,
-                    Map<String, String> resourceVersions,
-                    Set<String> pendingResources,
+                    TrackedResources trackedResources,
                     String version,
                     boolean isWildcard,
                     Consumer<DeltaResponse> responseConsumer) {
     this.request = request;
-    this.resourceVersions = resourceVersions;
-    this.pendingResources = pendingResources;
+    this.resourceVersions = Collections.unmodifiableMap(trackedResources.versions());
+    this.pendingResources = Collections.unmodifiableSet(trackedResources.pending());
+    this.trackedResources = trackedResources;
     this.version = version;
     this.isWildcard = isWildcard;
     this.responseConsumer = responseConsumer;
@@ -81,6 +86,14 @@ public class DeltaWatch {
    */
   public Set<String> pendingResources() {
     return pendingResources;
+  }
+
+  /**
+   * Runs the given action while holding the lock of the tracked resources, which is shared with the stream that
+   * mutates them. {@link #trackedResources()} and {@link #pendingResources()} must only be read inside it.
+   */
+  public <R> R locked(Supplier<R> action) {
+    return trackedResources.locked(action);
   }
 
   /**

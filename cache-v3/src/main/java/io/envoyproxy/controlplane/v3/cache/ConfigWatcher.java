@@ -2,7 +2,6 @@ package io.envoyproxy.controlplane.v3.cache;
 
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import javax.annotation.concurrent.ThreadSafe;
@@ -36,8 +35,8 @@ public interface ConfigWatcher {
    * Returns a new configuration resource {@link Watch} for the given discovery request.
    * @param request           the discovery request (node, names, etc.) to use to generate the watch
    * @param currentVersion    the last version applied by the caller
-   * @param resourceVersions  resources that are already known to the caller
-   * @param pendingResources  resources that the caller is waiting for
+   * @param trackedResources  resources that are already known to the caller and resources it is waiting for; the
+   *                          watch reads them under their monitor, the caller mutates them under the same monitor
    * @param isWildcard        indicates if the stream is in wildcard mode
    * @param responseConsumer  the response handler, used to process outgoing response messages
    * @param hasClusterChanged indicates if EDS should be sent immediately, even if version has not been changed.
@@ -46,8 +45,7 @@ public interface ConfigWatcher {
   DeltaWatch createDeltaWatch(
       DeltaDiscoveryRequest request,
       String currentVersion,
-      Map<String, String> resourceVersions,
-      Set<String> pendingResources,
+      TrackedResources trackedResources,
       boolean isWildcard,
       Consumer<DeltaResponse> responseConsumer,
       boolean hasClusterChanged);

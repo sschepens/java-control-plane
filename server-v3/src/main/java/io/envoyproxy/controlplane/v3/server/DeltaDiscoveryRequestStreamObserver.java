@@ -2,6 +2,7 @@ package io.envoyproxy.controlplane.v3.server;
 
 import io.envoyproxy.controlplane.v3.cache.DeltaResponse;
 import io.envoyproxy.controlplane.v3.cache.DeltaWatch;
+import io.envoyproxy.controlplane.v3.cache.TrackedResources;
 import io.envoyproxy.controlplane.v3.server.exception.RequestException;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest;
@@ -16,7 +17,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,47 +95,89 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
       version = latestVersion(requestTypeUrl);
     }
 
-    if (!completeRequest.getResponseNonce().isEmpty()) {
-      // envoy is replying to a response we sent, get and clear respective response
-      LatestDeltaDiscoveryResponse response = clearResponse(requestTypeUrl, completeRequest.getResponseNonce());
-      if (!completeRequest.hasErrorDetail()) {
-        // if envoy has acked, update tracked resources
-        // from the corresponding response
-        updateTrackedResources(requestTypeUrl,
-            response.resourceVersions(),
-            response.removedResources());
+    final TrackedResources tracked = trackedResources(requestTypeUrl);
+    // The snapshot thread reads this state while it evaluates the open watch, under the same lock. Cancel that
+    // watch before touching the state so an evaluation racing with us is discarded instead of responding from a
+    // half-updated view, and keep the lock until the replacement watch exists.
+    tracked.locked(() -> {
+      cancelWatch(requestTypeUrl);
+
+      if (!completeRequest.getResponseNonce().isEmpty()) {
+        // envoy is replying to a response we sent, get and clear respective response
+        LatestDeltaDiscoveryResponse response = clearResponse(requestTypeUrl, completeRequest.getResponseNonce());
+        if (!completeRequest.hasErrorDetail()) {
+          // if envoy has acked, update tracked resources
+          // from the corresponding response
+          updateTrackedResources(tracked, response.resourceVersions(), response.removedResources());
+        }
       }
-    }
 
-    // Apply subscription changes after the ACK so explicitly re-requested resources remain pending,
-    // and resources unsubscribed in this request are not restored by the ACK.
-    updateSubscriptions(requestTypeUrl,
-        request.getResourceNamesSubscribeList(),
-        request.getResourceNamesUnsubscribeList());
+      // Apply subscription changes after the ACK so explicitly re-requested resources remain pending,
+      // and resources unsubscribed in this request are not restored by the ACK.
+      updateSubscriptions(tracked,
+          request.getResourceNamesSubscribeList(),
+          request.getResourceNamesUnsubscribeList());
 
-    // On the first request of a stream envoy lists every resource it is interested in under
-    // resource_names_subscribe and, for the ones it already holds, their versions under
-    // initial_resource_versions. Apply the versions after the subscriptions so a name with a known
-    // version becomes tracked instead of pending: it is then only sent again if the version differs
-    // (or reported in removed_resources if it no longer exists), instead of being resent in full.
-    // Names subscribed without a version stay pending and are sent as soon as they are available.
-    if (request.getInitialResourceVersionsCount() > 0) {
-      updateTrackedResources(requestTypeUrl, request.getInitialResourceVersionsMap(), Collections.emptyList());
-    }
+      // On the first request of a stream envoy lists every resource it is interested in under
+      // resource_names_subscribe and, for the ones it already holds, their versions under
+      // initial_resource_versions. Apply the versions after the subscriptions so a name with a known
+      // version becomes tracked instead of pending: it is then only sent again if the version differs
+      // (or reported in removed_resources if it no longer exists), instead of being resent in full.
+      // Names subscribed without a version stay pending and are sent as soon as they are available.
+      if (request.getInitialResourceVersionsCount() > 0) {
+        updateTrackedResources(tracked, request.getInitialResourceVersionsMap(), Collections.emptyList());
+      }
 
-    if (responseCount(requestTypeUrl) == 0) {
-      // we should only create watches when there's no pending ack
-      // this tries to ensure we don't have two outstanding responses
-      computeWatch(requestTypeUrl, () -> discoverySever.configWatcher.createDeltaWatch(
-          completeRequest,
-          version,
-          resourceVersions(requestTypeUrl),
-          pendingResources(requestTypeUrl),
-          isWildcard(requestTypeUrl),
-          r -> executor.execute(() -> send(r, requestTypeUrl)),
-          hasClusterChanged
-      ));
-    }
+      if (responseCount(requestTypeUrl) == 0) {
+        // we should only create watches when there's no pending ack
+        // this tries to ensure we don't have two outstanding responses
+        setWatch(requestTypeUrl, discoverySever.configWatcher.createDeltaWatch(
+            completeRequest,
+            version,
+            tracked,
+            isWildcard(requestTypeUrl),
+            r -> executor.execute(() -> send(r, requestTypeUrl)),
+            hasClusterChanged
+        ));
+      }
+    });
+  }
+
+  private static void updateTrackedResources(TrackedResources tracked,
+                                             Map<String, String> resourcesVersions,
+                                             List<String> removedResources) {
+    resourcesVersions.forEach((k, v) -> {
+      tracked.versions().put(k, v);
+      tracked.pending().remove(k);
+    });
+    removedResources.forEach(tracked.versions()::remove);
+    tracked.pending().removeAll(removedResources);
+  }
+
+  private static void updateSubscriptions(TrackedResources tracked,
+                                          List<String> resourceNamesSubscribe,
+                                          List<String> resourceNamesUnsubscribe) {
+    // unsubscribe first
+    resourceNamesUnsubscribe.forEach(s -> {
+      tracked.versions().remove(s);
+      tracked.pending().remove(s);
+    });
+    tracked.pending().addAll(resourceNamesSubscribe);
+  }
+
+  /**
+   * Resource versions the client holds for the given type. Only for tests: production callers hold the monitor of
+   * {@link #trackedResources(String)}.
+   */
+  Map<String, String> resourceVersions(String typeUrl) {
+    return trackedResources(typeUrl).versions();
+  }
+
+  /**
+   * Resource names the client is waiting for, for the given type. Only for tests, see {@link #resourceVersions}.
+   */
+  Set<String> pendingResources(String typeUrl) {
+    return trackedResources(typeUrl).pending();
   }
 
   @Override
@@ -252,19 +294,20 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
 
   abstract int responseCount(String typeUrl);
 
-  abstract Map<String, String> resourceVersions(String typeUrl);
-
-  abstract Set<String> pendingResources(String typeUrl);
-
   abstract boolean isWildcard(String typeUrl);
 
-  abstract void updateTrackedResources(String typeUrl,
-                                       Map<String, String> resourcesVersions,
-                                       List<String> removedResources);
+  /**
+   * The tracked resources of the given type. Mutated only by this stream and only inside their lock.
+   */
+  abstract TrackedResources trackedResources(String typeUrl);
 
-  abstract void updateSubscriptions(String typeUrl,
-                                    List<String> resourceNamesSubscribe,
-                                    List<String> resourceNamesUnsubscribe);
+  /**
+   * Cancels the current watch of the given type, if any.
+   */
+  abstract void cancelWatch(String typeUrl);
 
-  abstract void computeWatch(String typeUrl, Supplier<DeltaWatch> watchCreator);
+  /**
+   * Stores the current watch of the given type.
+   */
+  abstract void setWatch(String typeUrl, DeltaWatch watch);
 }
