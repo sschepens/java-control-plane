@@ -187,6 +187,31 @@ public class DeltaDiscoveryRequestStreamObserverTest {
   }
 
   @Test
+  public void subscriptionChangeWhileAnAckIsPendingIsServedImmediately() throws Exception {
+    send(request().addResourceNamesSubscribe(RESOURCE_NAME));
+    assertThat(responses).hasSize(1);
+    String firstNonce = responses.get(0).getNonce();
+
+    // no ack yet, envoy subscribes to another resource
+    send(request().addResourceNamesSubscribe(OTHER_RESOURCE_NAME));
+
+    assertThat(responses).hasSize(2);
+    assertThat(responses.get(1).getResourcesList()).as("only the new name, the first one is already in flight")
+        .hasSize(1);
+    assertThat(responses.get(1).getResources(0).getName()).isEqualTo(OTHER_RESOURCE_NAME);
+    assertThat(observer.responseCount(ROUTE_TYPE_URL)).isEqualTo(2);
+
+    send(request().setResponseNonce(firstNonce));
+    send(request().setResponseNonce(responses.get(1).getNonce()));
+
+    assertThat(observer.responseCount(ROUTE_TYPE_URL)).isZero();
+    assertThat(responses).hasSize(2);
+    assertThat(observer.resourceVersions(ROUTE_TYPE_URL))
+        .containsEntry(RESOURCE_NAME, RESOURCE_VERSION)
+        .containsEntry(OTHER_RESOURCE_NAME, OTHER_RESOURCE_VERSION);
+  }
+
+  @Test
   public void initialResourceVersionsSuppressResendOfUnchangedResource() throws Exception {
     // first request of a stream: envoy subscribes to everything it wants and reports what it already has
     send(request().addResourceNamesSubscribe(RESOURCE_NAME)
@@ -259,20 +284,21 @@ public class DeltaDiscoveryRequestStreamObserverTest {
     assertThat(responses).hasSize(1);
     String realNonce = responses.get(0).getNonce();
 
-    // a bogus ack must not break the stream nor count as the real ack, but its subscription must be kept
+    // a bogus ack must not break the stream nor count as the real ack; its subscription is served
     send(request().setResponseNonce("not-a-nonce-we-sent").addResourceNamesSubscribe(OTHER_RESOURCE_NAME));
 
     assertThat(errors).isEmpty();
-    assertThat(responses).hasSize(1);
-    assertThat(observer.responseCount(ROUTE_TYPE_URL)).as("the real response is still pending").isEqualTo(1);
-    assertThat(observer.pendingResources(ROUTE_TYPE_URL)).containsExactly(OTHER_RESOURCE_NAME);
-
-    // the real ack lets the pending subscription be served
-    send(request().setResponseNonce(realNonce));
-
     assertThat(responses).hasSize(2);
     assertThat(responses.get(1).getResourcesList()).hasSize(1);
     assertThat(responses.get(1).getResources(0).getName()).isEqualTo(OTHER_RESOURCE_NAME);
+    assertThat(observer.responseCount(ROUTE_TYPE_URL)).as("both real responses are still pending").isEqualTo(2);
+
+    // the real acks clear the pending responses
+    send(request().setResponseNonce(realNonce));
+    send(request().setResponseNonce(responses.get(1).getNonce()));
+
+    assertThat(observer.responseCount(ROUTE_TYPE_URL)).isZero();
+    assertThat(responses).hasSize(2);
   }
 
   @Test

@@ -134,23 +134,21 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
         updateTrackedResources(tracked, request.getInitialResourceVersionsMap());
       }
 
-      if (responseCount(requestTypeUrl) == 0) {
-        // we should only create watches when there's no pending ack
-        // this tries to ensure we don't have two outstanding responses
-        setWatch(requestTypeUrl, discoverySever.configWatcher.createDeltaWatch(
-            completeRequest,
-            version,
-            tracked,
-            isWildcard(requestTypeUrl),
-            r -> {
-              // Runs on the thread that produced the response, inside the lock, before anything else can create
-              // a watch for this type.
-              recordReturned(tracked, r);
-              executor.execute(() -> send(r, requestTypeUrl));
-            },
-            hasClusterChanged
-        ));
-      }
+      // Create the watch even if a response is still waiting for its ack: its resources were recorded as
+      // returned when it was produced, so a new response only carries what has changed or been subscribed since.
+      setWatch(requestTypeUrl, discoverySever.configWatcher.createDeltaWatch(
+          completeRequest,
+          version,
+          tracked,
+          isWildcard(requestTypeUrl),
+          r -> {
+            // Runs on the thread that produced the response, inside the lock, before anything else can create
+            // a watch for this type.
+            recordReturned(tracked, r);
+            executor.execute(() -> send(r, requestTypeUrl));
+          },
+          hasClusterChanged
+      ));
     });
   }
 
