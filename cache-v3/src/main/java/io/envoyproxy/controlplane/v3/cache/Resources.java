@@ -6,7 +6,6 @@ import static io.envoyproxy.envoy.extensions.filters.network.http_connection_man
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -22,6 +21,7 @@ import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.Secret;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -120,10 +120,12 @@ public class Resources {
   /**
    * Returns all resource names that are referenced by the given collection of resources.
    *
+   * <p>The returned set is mutable and independent of the supplied resources.
+   *
    * @param resources the resource whose dependencies we are calculating
    */
   public static <T extends Message> Set<String> getResourceReferences(Collection<SnapshotResource<T>> resources) {
-    final ImmutableSet.Builder<String> refs = ImmutableSet.builder();
+    final Set<String> refs = new HashSet<>();
 
     for (SnapshotResource<T> sr : resources) {
       Message r = sr.resource();
@@ -177,6 +179,6 @@ public class Resources {
       }
     }
 
-    return refs.build();
+    return refs;
   }
 }
