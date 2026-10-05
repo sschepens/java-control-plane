@@ -11,7 +11,6 @@ import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -111,10 +110,11 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
           // make grpc close the stream with UNKNOWN.
           LOGGER.warn("[{}] ignoring {} request with unknown nonce {}",
               streamId, requestTypeUrl, completeRequest.getResponseNonce());
-        } else if (!completeRequest.hasErrorDetail()) {
-          // if envoy has acked, update tracked resources
-          // from the corresponding response
-          updateTrackedResources(tracked, response.resourceVersions(), response.removedResources());
+        } else if (completeRequest.hasErrorDetail()) {
+          // The versions of a rejected response stay recorded as returned, so its resources are not sent again
+          // until they change (as go-control-plane does). Resending the same versions would only be rejected again.
+          LOGGER.warn("[{}] {} response {} rejected: {}", streamId, requestTypeUrl, response.nonce(),
+              completeRequest.getErrorDetail().getMessage());
         }
       }
 
@@ -131,7 +131,7 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
       // (or reported in removed_resources if it no longer exists), instead of being resent in full.
       // Names subscribed without a version stay pending and are sent as soon as they are available.
       if (request.getInitialResourceVersionsCount() > 0) {
-        updateTrackedResources(tracked, request.getInitialResourceVersionsMap(), Collections.emptyList());
+        updateTrackedResources(tracked, request.getInitialResourceVersionsMap());
       }
 
       if (responseCount(requestTypeUrl) == 0) {
@@ -142,22 +142,39 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
             version,
             tracked,
             isWildcard(requestTypeUrl),
-            r -> executor.execute(() -> send(r, requestTypeUrl)),
+            r -> {
+              // Runs on the thread that produced the response, inside the lock, before anything else can create
+              // a watch for this type.
+              recordReturned(tracked, r);
+              executor.execute(() -> send(r, requestTypeUrl));
+            },
             hasClusterChanged
         ));
       }
     });
   }
 
-  private static void updateTrackedResources(TrackedResources tracked,
-                                             Map<String, String> resourcesVersions,
-                                             List<String> removedResources) {
+  /**
+   * Records the resources of a response as held by the client, as soon as the response is produced. The client is
+   * expected to accept it; if it rejects it the versions stay recorded, so the same versions are not sent again until
+   * they change.
+   */
+  private static void recordReturned(TrackedResources tracked, DeltaResponse response) {
+    response.resources().forEach((name, resource) -> {
+      tracked.versions().put(name, resource.version());
+      tracked.pending().remove(name);
+    });
+    response.removedResources().forEach(name -> {
+      tracked.versions().remove(name);
+      tracked.pending().remove(name);
+    });
+  }
+
+  private static void updateTrackedResources(TrackedResources tracked, Map<String, String> resourcesVersions) {
     resourcesVersions.forEach((k, v) -> {
       tracked.versions().put(k, v);
       tracked.pending().remove(k);
     });
-    removedResources.forEach(tracked.versions()::remove);
-    tracked.pending().removeAll(removedResources);
   }
 
   private static void updateSubscriptions(TrackedResources tracked,
@@ -298,19 +315,7 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
     // Store the latest response *before* we send the response. This ensures that by the time the request
     // is processed the map is guaranteed to be updated. Doing it afterwards leads to a race conditions
     // which may see the incoming request arrive before the map is updated, failing the nonce check erroneously.
-    setResponse(
-        typeUrl,
-        nonce,
-        LatestDeltaDiscoveryResponse.create(
-            nonce,
-            response.version(),
-            response.resources()
-                .entrySet()
-                .stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().version())),
-            response.removedResources()
-        )
-    );
+    setResponse(typeUrl, nonce, LatestDeltaDiscoveryResponse.create(nonce, response.version()));
     setLatestVersion(typeUrl, response.version());
     synchronized (responseObserver) {
       if (!isClosing) {

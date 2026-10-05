@@ -10,11 +10,13 @@ import java.util.function.Supplier;
  * Resource bookkeeping for one resource type on one delta stream: the versions the client is known to hold and the
  * names it has subscribed to but has not received yet.
  *
- * <p>The stream that owns an instance mutates it on its own thread while the cache reads it from the thread that sets
- * snapshots. Every access to the collections must happen inside {@link #locked(Runnable)} or
+ * <p>The stream that owns an instance mutates it when it processes a request and, through its response consumer,
+ * when a watch produces a response, which may happen on the thread that sets snapshots; the cache reads it from that
+ * same thread. Every access to the collections must happen inside {@link #locked(Runnable)} or
  * {@link #locked(Supplier)}: the server uses them while it processes a request (cancelling the current watch before
  * mutating the state that watch reads) and the cache uses them in {@link ConfigWatcher#createDeltaWatch} and while
- * evaluating an open watch against a new snapshot. The lock is reentrant.
+ * evaluating an open watch against a new snapshot, which is also where the response consumer runs. The lock is
+ * reentrant.
  */
 public final class TrackedResources {
   private final Map<String, String> versions = new HashMap<>();

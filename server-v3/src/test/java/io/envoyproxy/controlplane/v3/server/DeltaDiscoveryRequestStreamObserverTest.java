@@ -154,16 +154,36 @@ public class DeltaDiscoveryRequestStreamObserverTest {
   }
 
   @Test
-  public void nackOfRemovalDoesNotClearPendingResource() throws Exception {
+  public void nackedResourceIsNotResentUntilItChanges() throws Exception {
+    send(request().addResourceNamesSubscribe(RESOURCE_NAME));
+    assertThat(responses).hasSize(1);
+    assertThat(observer.resourceVersions(ROUTE_TYPE_URL))
+        .as("versions are recorded when the response is produced").containsEntry(RESOURCE_NAME, RESOURCE_VERSION);
+
+    send(request().setResponseNonce(responses.get(0).getNonce())
+        .setErrorDetail(Status.newBuilder().setCode(3).setMessage("rejected")));
+
+    assertThat(responses).as("the same versions are not resent after a nack").hasSize(1);
+    assertThat(observer.responseCount(ROUTE_TYPE_URL)).isZero();
+
+    cache.setSnapshot("group", snapshot("resource-v2", OTHER_RESOURCE_VERSION, "snapshot-v2"));
+    flush();
+
+    assertThat(responses).hasSize(2);
+    assertThat(responses.get(1).getResources(0).getName()).isEqualTo(RESOURCE_NAME);
+    assertThat(responses.get(1).getResources(0).getVersion()).isEqualTo("resource-v2");
+  }
+
+  @Test
+  public void nackOfRemovalIsNotResent() throws Exception {
     send(request().addResourceNamesSubscribe(MISSING_RESOURCE_NAME));
     assertThat(responses).hasSize(1);
 
     send(request().setResponseNonce(responses.get(0).getNonce())
         .setErrorDetail(Status.newBuilder().setCode(3).setMessage("rejected")));
 
-    assertThat(observer.pendingResources(ROUTE_TYPE_URL)).containsExactly(MISSING_RESOURCE_NAME);
-    assertThat(responses).hasSize(2);
-    assertThat(responses.get(1).getRemovedResourcesList()).containsExactly(MISSING_RESOURCE_NAME);
+    assertThat(observer.pendingResources(ROUTE_TYPE_URL)).isEmpty();
+    assertThat(responses).hasSize(1);
   }
 
   @Test
@@ -207,7 +227,7 @@ public class DeltaDiscoveryRequestStreamObserverTest {
     assertThat(responses.get(0).getResourcesList()).hasSize(1);
     assertThat(responses.get(0).getResources(0).getName()).isEqualTo(OTHER_RESOURCE_NAME);
     assertThat(responses.get(0).getResources(0).getVersion()).isEqualTo(OTHER_RESOURCE_VERSION);
-    assertThat(observer.pendingResources(ROUTE_TYPE_URL)).containsExactly(OTHER_RESOURCE_NAME);
+    assertThat(observer.pendingResources(ROUTE_TYPE_URL)).isEmpty();
 
     send(request().setResponseNonce(responses.get(0).getNonce()));
     assertThat(observer.pendingResources(ROUTE_TYPE_URL)).isEmpty();
@@ -245,13 +265,11 @@ public class DeltaDiscoveryRequestStreamObserverTest {
     assertThat(errors).isEmpty();
     assertThat(responses).hasSize(1);
     assertThat(observer.responseCount(ROUTE_TYPE_URL)).as("the real response is still pending").isEqualTo(1);
-    assertThat(observer.resourceVersions(ROUTE_TYPE_URL)).doesNotContainKey(RESOURCE_NAME);
-    assertThat(observer.pendingResources(ROUTE_TYPE_URL)).contains(RESOURCE_NAME, OTHER_RESOURCE_NAME);
+    assertThat(observer.pendingResources(ROUTE_TYPE_URL)).containsExactly(OTHER_RESOURCE_NAME);
 
-    // the real ack completes the first response and the pending subscription is served
+    // the real ack lets the pending subscription be served
     send(request().setResponseNonce(realNonce));
 
-    assertThat(observer.resourceVersions(ROUTE_TYPE_URL)).containsEntry(RESOURCE_NAME, RESOURCE_VERSION);
     assertThat(responses).hasSize(2);
     assertThat(responses.get(1).getResourcesList()).hasSize(1);
     assertThat(responses.get(1).getResources(0).getName()).isEqualTo(OTHER_RESOURCE_NAME);
