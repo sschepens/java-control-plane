@@ -95,10 +95,6 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
       version = latestVersion(requestTypeUrl);
     }
 
-    if (request.getInitialResourceVersionsCount() > 0) {
-      updateTrackedResources(requestTypeUrl, request.getInitialResourceVersionsMap(), Collections.emptyList());
-    }
-
     if (!completeRequest.getResponseNonce().isEmpty()) {
       // envoy is replying to a response we sent, get and clear respective response
       LatestDeltaDiscoveryResponse response = clearResponse(requestTypeUrl, completeRequest.getResponseNonce());
@@ -117,8 +113,15 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
         request.getResourceNamesSubscribeList(),
         request.getResourceNamesUnsubscribeList());
 
-    // if nonce is empty, envoy is only requesting new resources or this is a new connection,
-    // in either case we have already updated the subscriptions
+    // On the first request of a stream envoy lists every resource it is interested in under
+    // resource_names_subscribe and, for the ones it already holds, their versions under
+    // initial_resource_versions. Apply the versions after the subscriptions so a name with a known
+    // version becomes tracked instead of pending: it is then only sent again if the version differs
+    // (or reported in removed_resources if it no longer exists), instead of being resent in full.
+    // Names subscribed without a version stay pending and are sent as soon as they are available.
+    if (request.getInitialResourceVersionsCount() > 0) {
+      updateTrackedResources(requestTypeUrl, request.getInitialResourceVersionsMap(), Collections.emptyList());
+    }
 
     if (responseCount(requestTypeUrl) == 0) {
       // we should only create watches when there's no pending ack
