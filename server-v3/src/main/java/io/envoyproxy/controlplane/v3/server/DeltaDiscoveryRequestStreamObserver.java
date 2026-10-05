@@ -270,7 +270,7 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
             .stream()
             .map(entry -> Resource.newBuilder()
                 .setName(entry.getKey())
-                .setResource(discoverySever.protoResourcesSerializer.serialize(entry.getValue().resource()))
+                .setResource(entry.getValue().packed())
                 .setVersion(entry.getValue().version())
                 .build())
             .collect(Collectors.toList()))
