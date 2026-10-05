@@ -105,7 +105,13 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
       if (!completeRequest.getResponseNonce().isEmpty()) {
         // envoy is replying to a response we sent, get and clear respective response
         LatestDeltaDiscoveryResponse response = clearResponse(requestTypeUrl, completeRequest.getResponseNonce());
-        if (!completeRequest.hasErrorDetail()) {
+        if (response == null) {
+          // Not a response we are waiting for: a duplicate ack, or an ack for a response that was already cleared.
+          // Ignore the ack but still apply the subscription changes carried by the request. Throwing here would
+          // make grpc close the stream with UNKNOWN.
+          LOGGER.warn("[{}] ignoring {} request with unknown nonce {}",
+              streamId, requestTypeUrl, completeRequest.getResponseNonce());
+        } else if (!completeRequest.hasErrorDetail()) {
           // if envoy has acked, update tracked resources
           // from the corresponding response
           updateTrackedResources(tracked, response.resourceVersions(), response.removedResources());

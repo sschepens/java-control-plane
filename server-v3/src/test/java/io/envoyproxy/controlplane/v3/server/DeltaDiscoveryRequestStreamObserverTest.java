@@ -234,6 +234,42 @@ public class DeltaDiscoveryRequestStreamObserverTest {
   }
 
   @Test
+  public void unknownNonceIsIgnoredWhileSubscriptionsStillApply() throws Exception {
+    send(request().addResourceNamesSubscribe(RESOURCE_NAME));
+    assertThat(responses).hasSize(1);
+    String realNonce = responses.get(0).getNonce();
+
+    // a bogus ack must not break the stream nor count as the real ack, but its subscription must be kept
+    send(request().setResponseNonce("not-a-nonce-we-sent").addResourceNamesSubscribe(OTHER_RESOURCE_NAME));
+
+    assertThat(errors).isEmpty();
+    assertThat(responses).hasSize(1);
+    assertThat(observer.responseCount(ROUTE_TYPE_URL)).as("the real response is still pending").isEqualTo(1);
+    assertThat(observer.resourceVersions(ROUTE_TYPE_URL)).doesNotContainKey(RESOURCE_NAME);
+    assertThat(observer.pendingResources(ROUTE_TYPE_URL)).contains(RESOURCE_NAME, OTHER_RESOURCE_NAME);
+
+    // the real ack completes the first response and the pending subscription is served
+    send(request().setResponseNonce(realNonce));
+
+    assertThat(observer.resourceVersions(ROUTE_TYPE_URL)).containsEntry(RESOURCE_NAME, RESOURCE_VERSION);
+    assertThat(responses).hasSize(2);
+    assertThat(responses.get(1).getResourcesList()).hasSize(1);
+    assertThat(responses.get(1).getResources(0).getName()).isEqualTo(OTHER_RESOURCE_NAME);
+  }
+
+  @Test
+  public void unknownNonceWithNothingPendingIsIgnored() throws Exception {
+    send(request().setResponseNonce("stale"));
+
+    assertThat(errors).isEmpty();
+    assertThat(responses).isEmpty();
+    assertThat(observer.responseCount(ROUTE_TYPE_URL)).isZero();
+
+    send(request().addResourceNamesSubscribe(RESOURCE_NAME));
+    assertThat(responses).hasSize(1);
+  }
+
+  @Test
   public void failureWhileWritingAResponseClosesTheStream() throws Exception {
     sendFailure = new IllegalStateException("transport exploded");
 
