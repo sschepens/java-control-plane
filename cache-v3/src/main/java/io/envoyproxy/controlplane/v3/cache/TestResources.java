@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.config.route.v3.Route;
 import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
+import io.envoyproxy.envoy.config.route.v3.ScopedRouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager.CodecType;
@@ -183,6 +184,40 @@ public class TestResources {
                     .setPrefix("/"))
                 .setRoute(RouteAction.newBuilder()
                     .setCluster(clusterName))))
+        .build();
+  }
+
+  /**
+   * Returns a new test scoped route configuration.
+   *
+   * @param scopedRouteName name of the new scoped route configuration
+   * @param routeName       name of the test route configuration it points to
+   */
+  public static ScopedRouteConfiguration createScopedRoute(String scopedRouteName, String routeName) {
+    return ScopedRouteConfiguration.newBuilder()
+        .setName(scopedRouteName)
+        .setRouteConfigurationName(routeName)
+        .setKey(ScopedRouteConfiguration.Key.newBuilder()
+            .addFragments(ScopedRouteConfiguration.Key.Fragment.newBuilder()
+                .setStringKey(scopedRouteName)))
+        .build();
+  }
+
+  /**
+   * Returns a new test virtual host.
+   *
+   * @param virtualHostName name of the new virtual host
+   * @param clusterName     name of the test cluster that is associated with this virtual host
+   */
+  public static VirtualHost createVirtualHost(String virtualHostName, String clusterName) {
+    return VirtualHost.newBuilder()
+        .setName(virtualHostName)
+        .addDomains("*")
+        .addRoutes(Route.newBuilder()
+            .setMatch(RouteMatch.newBuilder()
+                .setPrefix("/"))
+            .setRoute(RouteAction.newBuilder()
+                .setCluster(clusterName)))
         .build();
   }
 

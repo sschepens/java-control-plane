@@ -264,11 +264,14 @@ public class SimpleCacheTest {
       assertThatWatchReceivesSnapshot(watches.get(typeUrl), SNAPSHOT2);
     }
 
-    // Verify that CDS and LDS always get triggered before EDS and RDS respectively.
+    // Verify that CDS and LDS always get triggered before EDS and RDS respectively (SRDS sits between LDS and
+    // RDS, VHDS after RDS, as in Resources.TYPE_URLS).
     assertThat(responseOrderTracker.responseTypes).containsExactly(Resources.CLUSTER_TYPE_URL,
         Resources.CLUSTER_TYPE_URL, Resources.ENDPOINT_TYPE_URL, Resources.ENDPOINT_TYPE_URL,
-        Resources.LISTENER_TYPE_URL, Resources.LISTENER_TYPE_URL, Resources.ROUTE_TYPE_URL,
-        Resources.ROUTE_TYPE_URL, Resources.SECRET_TYPE_URL, Resources.SECRET_TYPE_URL);
+        Resources.LISTENER_TYPE_URL, Resources.LISTENER_TYPE_URL, Resources.SCOPED_ROUTE_TYPE_URL,
+        Resources.SCOPED_ROUTE_TYPE_URL, Resources.ROUTE_TYPE_URL, Resources.ROUTE_TYPE_URL,
+        Resources.VIRTUAL_HOST_TYPE_URL, Resources.VIRTUAL_HOST_TYPE_URL, Resources.SECRET_TYPE_URL,
+        Resources.SECRET_TYPE_URL);
   }
 
   @Test
