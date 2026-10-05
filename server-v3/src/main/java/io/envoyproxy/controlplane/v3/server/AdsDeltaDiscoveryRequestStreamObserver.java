@@ -130,6 +130,7 @@ public class AdsDeltaDiscoveryRequestStreamObserver extends DeltaDiscoveryReques
       pendingResources.remove(k);
     });
     removedResources.forEach(trackedResources::remove);
+    pendingResources.removeAll(removedResources);
   }
 
   @Override

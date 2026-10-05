@@ -99,11 +99,6 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
       updateTrackedResources(requestTypeUrl, request.getInitialResourceVersionsMap(), Collections.emptyList());
     }
 
-    // always update subscriptions
-    updateSubscriptions(requestTypeUrl,
-        request.getResourceNamesSubscribeList(),
-        request.getResourceNamesUnsubscribeList());
-
     if (!completeRequest.getResponseNonce().isEmpty()) {
       // envoy is replying to a response we sent, get and clear respective response
       LatestDeltaDiscoveryResponse response = clearResponse(requestTypeUrl, completeRequest.getResponseNonce());
@@ -115,6 +110,12 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
             response.removedResources());
       }
     }
+
+    // Apply subscription changes after the ACK so explicitly re-requested resources remain pending,
+    // and resources unsubscribed in this request are not restored by the ACK.
+    updateSubscriptions(requestTypeUrl,
+        request.getResourceNamesSubscribeList(),
+        request.getResourceNamesUnsubscribeList());
 
     // if nonce is empty, envoy is only requesting new resources or this is a new connection,
     // in either case we have already updated the subscriptions
