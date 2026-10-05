@@ -19,6 +19,7 @@ import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.ScopedRouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.Secret;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -41,13 +42,13 @@ public abstract class Snapshot {
    * @param version   the version associated with all resources in this snapshot
    */
   public static Snapshot create(
-      Iterable<SnapshotResource<Cluster>> clusters,
-      Iterable<SnapshotResource<ClusterLoadAssignment>> endpoints,
-      Iterable<SnapshotResource<Listener>> listeners,
-      Iterable<SnapshotResource<ScopedRouteConfiguration>> scopedRoutes,
-      Iterable<SnapshotResource<RouteConfiguration>> routes,
-      Iterable<SnapshotResource<VirtualHost>> virtualHosts,
-      Iterable<SnapshotResource<Secret>> secrets,
+      Collection<SnapshotResource<Cluster>> clusters,
+      Collection<SnapshotResource<ClusterLoadAssignment>> endpoints,
+      Collection<SnapshotResource<Listener>> listeners,
+      Collection<SnapshotResource<ScopedRouteConfiguration>> scopedRoutes,
+      Collection<SnapshotResource<RouteConfiguration>> routes,
+      Collection<SnapshotResource<VirtualHost>> virtualHosts,
+      Collection<SnapshotResource<Secret>> secrets,
       String version) {
 
     return new AutoValue_Snapshot(
@@ -73,19 +74,19 @@ public abstract class Snapshot {
    * @param routesVersion    the version of the route resources
    */
   public static Snapshot create(
-      Iterable<SnapshotResource<Cluster>> clusters,
+      Collection<SnapshotResource<Cluster>> clusters,
       String clustersVersion,
-      Iterable<SnapshotResource<ClusterLoadAssignment>> endpoints,
+      Collection<SnapshotResource<ClusterLoadAssignment>> endpoints,
       String endpointsVersion,
-      Iterable<SnapshotResource<Listener>> listeners,
+      Collection<SnapshotResource<Listener>> listeners,
       String listenersVersion,
-      Iterable<SnapshotResource<ScopedRouteConfiguration>> scopedRoutes,
+      Collection<SnapshotResource<ScopedRouteConfiguration>> scopedRoutes,
       String scopedRoutesVersion,
-      Iterable<SnapshotResource<RouteConfiguration>> routes,
+      Collection<SnapshotResource<RouteConfiguration>> routes,
       String routesVersion,
-      Iterable<SnapshotResource<VirtualHost>> virtualHosts,
+      Collection<SnapshotResource<VirtualHost>> virtualHosts,
       String virtualHostsVersion,
-      Iterable<SnapshotResource<Secret>> secrets,
+      Collection<SnapshotResource<Secret>> secrets,
       String secretsVersion) {
 
     // TODO(snowp): add a builder alternative
@@ -114,19 +115,19 @@ public abstract class Snapshot {
    * @param secretVersionResolver   version resolver of the secrets in this snapshot
    */
   public static Snapshot create(
-      Iterable<SnapshotResource<Cluster>> clusters,
+      Collection<SnapshotResource<Cluster>> clusters,
       ResourceVersionResolver clusterVersionResolver,
-      Iterable<SnapshotResource<ClusterLoadAssignment>> endpoints,
+      Collection<SnapshotResource<ClusterLoadAssignment>> endpoints,
       ResourceVersionResolver endpointVersionResolver,
-      Iterable<SnapshotResource<Listener>> listeners,
+      Collection<SnapshotResource<Listener>> listeners,
       ResourceVersionResolver listenerVersionResolver,
-      Iterable<SnapshotResource<ScopedRouteConfiguration>> scopedRoutes,
+      Collection<SnapshotResource<ScopedRouteConfiguration>> scopedRoutes,
       ResourceVersionResolver scopedRouteVersionResolver,
-      Iterable<SnapshotResource<RouteConfiguration>> routes,
+      Collection<SnapshotResource<RouteConfiguration>> routes,
       ResourceVersionResolver routeVersionResolver,
-      Iterable<SnapshotResource<VirtualHost>> virtualHosts,
+      Collection<SnapshotResource<VirtualHost>> virtualHosts,
       ResourceVersionResolver virtualHostVersionResolver,
-      Iterable<SnapshotResource<Secret>> secrets,
+      Collection<SnapshotResource<Secret>> secrets,
       ResourceVersionResolver secretVersionResolver) {
 
     return new AutoValue_Snapshot(

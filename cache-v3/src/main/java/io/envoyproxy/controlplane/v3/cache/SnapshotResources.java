@@ -1,12 +1,13 @@
 package io.envoyproxy.controlplane.v3.cache;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Message;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collector;
-import java.util.stream.StreamSupport;
+import java.util.function.Function;
 
 @AutoValue
 public abstract class SnapshotResources<T extends Message> {
@@ -19,39 +20,51 @@ public abstract class SnapshotResources<T extends Message> {
    * @param <T>       the type of resources in this collection
    */
   public static <T extends Message> SnapshotResources<T> create(
-      Iterable<SnapshotResource<T>> resources,
+      Collection<SnapshotResource<T>> resources,
       String version) {
-    return new AutoValue_SnapshotResources<>(
-        resourcesMap(resources),
-        (r) -> version
-    );
+    return create(resources, version, Resources::getResourceName);
   }
 
   /**
-   * Returns a new {@link SnapshotResources} instance.
-   *
-   * @param resources       the resources in this collection
-   * @param versionResolver version resolver for the resources in this collection
-   * @param <T>             the type of resources in this collection
+   * Creates resources with a uniform version and a caller-supplied resource-name extractor.
    */
   public static <T extends Message> SnapshotResources<T> create(
-      Iterable<SnapshotResource<T>> resources,
-      ResourceVersionResolver versionResolver) {
-    return new AutoValue_SnapshotResources<>(
-        resourcesMap(resources),
-        versionResolver
-    );
+      Collection<SnapshotResource<T>> resources,
+      String version,
+      Function<T, String> resourceName) {
+    return create(resources, (r) -> version, resourceName);
   }
 
-  private static <T extends Message> ImmutableMap<String, SnapshotResource<T>> resourcesMap(
-      Iterable<SnapshotResource<T>> resources) {
-    return StreamSupport.stream(resources.spliterator(), false)
-        .collect(
-            Collector.of(
-                ImmutableMap.Builder<String, SnapshotResource<T>>::new,
-                (b, e) -> b.put(Resources.getResourceName(e.resource()), e),
-                (b1, b2) -> b1.putAll(b2.build()),
-                ImmutableMap.Builder::build));
+  /**
+   * Creates resources with a version resolver and the standard xDS resource names.
+   */
+  public static <T extends Message> SnapshotResources<T> create(
+      Collection<SnapshotResource<T>> resources,
+      ResourceVersionResolver versionResolver) {
+    return create(resources, versionResolver, Resources::getResourceName);
+  }
+
+  /**
+   * Creates resources with a version resolver and a caller-supplied resource-name extractor.
+   *
+   * <p>The result exposes an unmodifiable map. If several resources have the same extracted name,
+   * the last resource in iteration order replaces earlier entries.
+   */
+  public static <T extends Message> SnapshotResources<T> create(
+      Collection<SnapshotResource<T>> resources,
+      ResourceVersionResolver versionResolver,
+      Function<T, String> resourceName) {
+    return new AutoValue_SnapshotResources<>(resourcesMap(resources, resourceName), versionResolver);
+  }
+
+  private static <T extends Message> Map<String, SnapshotResource<T>> resourcesMap(
+      Collection<SnapshotResource<T>> resources,
+      Function<T, String> resourceName) {
+    Map<String, SnapshotResource<T>> result = new HashMap<>(resources.size());
+    for (SnapshotResource<T> resource : resources) {
+      result.put(resourceName.apply(resource.resource()), resource);
+    }
+    return Collections.unmodifiableMap(result);
   }
 
   /**
