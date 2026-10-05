@@ -1,7 +1,6 @@
 package io.envoyproxy.controlplane.v3.cache;
 
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
@@ -40,8 +39,8 @@ public class DeltaWatch {
                     boolean isWildcard,
                     Consumer<DeltaResponse> responseConsumer) {
     this.request = request;
-    this.resourceVersions = Collections.unmodifiableMap(trackedResources.versions());
-    this.pendingResources = Collections.unmodifiableSet(trackedResources.pending());
+    this.resourceVersions = trackedResources.versions();
+    this.pendingResources = trackedResources.pending();
     this.trackedResources = trackedResources;
     this.version = version;
     this.isWildcard = isWildcard;

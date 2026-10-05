@@ -25,7 +25,7 @@ public class SimpleCacheDeltaWatchLockTest {
     cache.setSnapshot(GROUP, snapshot("v1", "snapshot-v1"));
 
     TrackedResources tracked = new TrackedResources();
-    tracked.versions().put(ROUTE_NAME, "v1");
+    tracked.track(ROUTE_NAME, "v1");
     List<DeltaResponse> responses = new CopyOnWriteArrayList<>();
     cache.createDeltaWatch(request(), "", tracked, false, responses::add, false);
 
@@ -38,7 +38,7 @@ public class SimpleCacheDeltaWatchLockTest {
       assertThat(responses).as("evaluation must wait for the lock").isEmpty();
 
       // The stream learns, while holding the lock, that the client already has v2.
-      tracked.versions().put(ROUTE_NAME, "v2");
+      tracked.track(ROUTE_NAME, "v2");
     });
     setter.join(5_000);
 
@@ -52,7 +52,7 @@ public class SimpleCacheDeltaWatchLockTest {
     cache.setSnapshot(GROUP, snapshot("v1", "snapshot-v1"));
 
     TrackedResources tracked = new TrackedResources();
-    tracked.versions().put(ROUTE_NAME, "v1");
+    tracked.track(ROUTE_NAME, "v1");
     List<DeltaResponse> responses = new CopyOnWriteArrayList<>();
     cache.createDeltaWatch(request(), "", tracked, false, responses::add, false);
 

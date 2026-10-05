@@ -11,7 +11,6 @@ import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -120,9 +119,8 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
 
       // Apply subscription changes after the ACK so explicitly re-requested resources remain pending,
       // and resources unsubscribed in this request are not restored by the ACK.
-      updateSubscriptions(tracked,
-          request.getResourceNamesSubscribeList(),
-          request.getResourceNamesUnsubscribeList());
+      tracked.unsubscribe(request.getResourceNamesUnsubscribeList());
+      tracked.subscribe(request.getResourceNamesSubscribeList());
 
       // On the first request of a stream envoy lists every resource it is interested in under
       // resource_names_subscribe and, for the ones it already holds, their versions under
@@ -131,7 +129,7 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
       // (or reported in removed_resources if it no longer exists), instead of being resent in full.
       // Names subscribed without a version stay pending and are sent as soon as they are available.
       if (request.getInitialResourceVersionsCount() > 0) {
-        updateTrackedResources(tracked, request.getInitialResourceVersionsMap());
+        request.getInitialResourceVersionsMap().forEach(tracked::track);
       }
 
       // Create the watch even if a response is still waiting for its ack: its resources were recorded as
@@ -158,32 +156,8 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
    * they change.
    */
   private static void recordReturned(TrackedResources tracked, DeltaResponse response) {
-    response.resources().forEach((name, resource) -> {
-      tracked.versions().put(name, resource.version());
-      tracked.pending().remove(name);
-    });
-    response.removedResources().forEach(name -> {
-      tracked.versions().remove(name);
-      tracked.pending().remove(name);
-    });
-  }
-
-  private static void updateTrackedResources(TrackedResources tracked, Map<String, String> resourcesVersions) {
-    resourcesVersions.forEach((k, v) -> {
-      tracked.versions().put(k, v);
-      tracked.pending().remove(k);
-    });
-  }
-
-  private static void updateSubscriptions(TrackedResources tracked,
-                                          List<String> resourceNamesSubscribe,
-                                          List<String> resourceNamesUnsubscribe) {
-    // unsubscribe first
-    resourceNamesUnsubscribe.forEach(s -> {
-      tracked.versions().remove(s);
-      tracked.pending().remove(s);
-    });
-    tracked.pending().addAll(resourceNamesSubscribe);
+    response.resources().forEach((name, resource) -> tracked.track(name, resource.version()));
+    response.removedResources().forEach(tracked::untrack);
   }
 
   /**
