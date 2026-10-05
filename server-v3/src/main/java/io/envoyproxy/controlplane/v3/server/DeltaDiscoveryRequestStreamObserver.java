@@ -1,6 +1,5 @@
 package io.envoyproxy.controlplane.v3.server;
 
-import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.controlplane.v3.cache.DeltaResponse;
 import io.envoyproxy.controlplane.v3.cache.DeltaWatch;
 import io.envoyproxy.controlplane.v3.server.exception.RequestException;
@@ -217,7 +216,7 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
             response.resources()
                 .entrySet()
                 .stream()
-                .collect(ImmutableMap.toImmutableMap(Map.Entry::getKey, entry -> entry.getValue().version())),
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().version())),
             response.removedResources()
         )
     );
