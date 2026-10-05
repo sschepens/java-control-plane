@@ -52,13 +52,13 @@ public abstract class Snapshot {
       String version) {
 
     return new AutoValue_Snapshot(
-        SnapshotResources.create(clusters, version),
-        SnapshotResources.create(endpoints, version),
-        SnapshotResources.create(listeners, version),
-        SnapshotResources.create(scopedRoutes, version),
-        SnapshotResources.create(routes, version),
-        SnapshotResources.create(virtualHosts, version),
-        SnapshotResources.create(secrets, version));
+        SnapshotResources.create(clusters, version, Cluster::getName),
+        SnapshotResources.create(endpoints, version, ClusterLoadAssignment::getClusterName),
+        SnapshotResources.create(listeners, version, Listener::getName),
+        SnapshotResources.create(scopedRoutes, version, ScopedRouteConfiguration::getName),
+        SnapshotResources.create(routes, version, RouteConfiguration::getName),
+        SnapshotResources.create(virtualHosts, version, VirtualHost::getName),
+        SnapshotResources.create(secrets, version, Secret::getName));
   }
 
   /**
@@ -91,13 +91,13 @@ public abstract class Snapshot {
 
     // TODO(snowp): add a builder alternative
     return new AutoValue_Snapshot(
-        SnapshotResources.create(clusters, clustersVersion),
-        SnapshotResources.create(endpoints, endpointsVersion),
-        SnapshotResources.create(listeners, listenersVersion),
-        SnapshotResources.create(scopedRoutes, scopedRoutesVersion),
-        SnapshotResources.create(routes, routesVersion),
-        SnapshotResources.create(virtualHosts, virtualHostsVersion),
-        SnapshotResources.create(secrets, secretsVersion));
+        SnapshotResources.create(clusters, clustersVersion, Cluster::getName),
+        SnapshotResources.create(endpoints, endpointsVersion, ClusterLoadAssignment::getClusterName),
+        SnapshotResources.create(listeners, listenersVersion, Listener::getName),
+        SnapshotResources.create(scopedRoutes, scopedRoutesVersion, ScopedRouteConfiguration::getName),
+        SnapshotResources.create(routes, routesVersion, RouteConfiguration::getName),
+        SnapshotResources.create(virtualHosts, virtualHostsVersion, VirtualHost::getName),
+        SnapshotResources.create(secrets, secretsVersion, Secret::getName));
   }
 
   /**
@@ -131,13 +131,13 @@ public abstract class Snapshot {
       ResourceVersionResolver secretVersionResolver) {
 
     return new AutoValue_Snapshot(
-        SnapshotResources.create(clusters, clusterVersionResolver),
-        SnapshotResources.create(endpoints, endpointVersionResolver),
-        SnapshotResources.create(listeners, listenerVersionResolver),
-        SnapshotResources.create(scopedRoutes, scopedRouteVersionResolver),
-        SnapshotResources.create(routes, routeVersionResolver),
-        SnapshotResources.create(virtualHosts, virtualHostVersionResolver),
-        SnapshotResources.create(secrets, secretVersionResolver));
+        SnapshotResources.create(clusters, clusterVersionResolver, Cluster::getName),
+        SnapshotResources.create(endpoints, endpointVersionResolver, ClusterLoadAssignment::getClusterName),
+        SnapshotResources.create(listeners, listenerVersionResolver, Listener::getName),
+        SnapshotResources.create(scopedRoutes, scopedRouteVersionResolver, ScopedRouteConfiguration::getName),
+        SnapshotResources.create(routes, routeVersionResolver, RouteConfiguration::getName),
+        SnapshotResources.create(virtualHosts, virtualHostVersionResolver, VirtualHost::getName),
+        SnapshotResources.create(secrets, secretVersionResolver, Secret::getName));
   }
 
   /**
