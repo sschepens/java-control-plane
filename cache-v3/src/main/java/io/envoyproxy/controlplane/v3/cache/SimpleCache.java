@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -48,6 +49,10 @@ public class SimpleCache<T> implements SnapshotCache<T> {
 
   @GuardedBy("lock")
   private final Map<T, Snapshot> snapshots = new HashMap<>();
+
+  // Keep a stable lock for each group even after clearSnapshot: replacing a lock while a push is in flight
+  // would allow two pushes for the same group to run concurrently.
+  private final ConcurrentMap<T, Lock> pushLocks = new ConcurrentHashMap<>();
   private final ConcurrentMap<T, ConcurrentMap<String, CacheStatusInfo<T>>> statuses = new ConcurrentHashMap<>();
 
   private AtomicLong watchCount = new AtomicLong();
@@ -332,25 +337,31 @@ public class SimpleCache<T> implements SnapshotCache<T> {
    * {@inheritDoc}
    */
   @Override
-  public synchronized void setSnapshot(T group, Snapshot snapshot) {
-    // we take a writeLock to prevent watches from being created while we update the snapshot
-    ConcurrentMap<String, CacheStatusInfo<T>> status;
-    Snapshot previousSnapshot;
-    writeLock.lock();
+  public void setSnapshot(T group, Snapshot snapshot) {
+    // Serialize the entire replace-and-notify operation for this group while allowing unrelated groups to push.
+    Lock pushLock = pushLocks.computeIfAbsent(group, g -> new ReentrantLock());
+    pushLock.lock();
     try {
-      // Update the existing snapshot entry.
-      previousSnapshot = snapshots.put(group, snapshot);
-      status = statuses.get(group);
+      // Prevent watches from being created while we update the snapshot.
+      ConcurrentMap<String, CacheStatusInfo<T>> status;
+      Snapshot previousSnapshot;
+      writeLock.lock();
+      try {
+        previousSnapshot = snapshots.put(group, snapshot);
+        status = statuses.get(group);
+      } finally {
+        writeLock.unlock();
+      }
+
+      if (status == null) {
+        return;
+      }
+
+      // Preserve the resource type ordering within each group.
+      respondWithSpecificOrder(group, previousSnapshot, snapshot, status);
     } finally {
-      writeLock.unlock();
+      pushLock.unlock();
     }
-
-    if (status == null) {
-      return;
-    }
-
-    // Responses should be in specific order and TYPE_URLS has a list of resources in the right order.
-    respondWithSpecificOrder(group, previousSnapshot, snapshot, status);
   }
 
   /**
