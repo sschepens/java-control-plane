@@ -1,6 +1,6 @@
 package io.envoyproxy.controlplane.v3.cache;
 
-import com.google.common.collect.ImmutableSet;
+import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -114,17 +114,23 @@ public class CacheStatusInfo<T> implements StatusInfo<T> {
   }
 
   /**
-   * Returns the set of IDs for all watched currently being tracked.
+   * Returns an unmodifiable live view of the IDs currently being tracked.
+   *
+   * <p>Changes to the backing watch map are reflected in this set. Callers that need stable IDs must copy it.
+   * Iteration tolerates concurrent updates but does not provide an atomic snapshot.
    */
   public Set<Long> watchIds() {
-    return ImmutableSet.copyOf(watches.keySet());
+    return Collections.unmodifiableSet(watches.keySet());
   }
 
   /**
-   * Returns the set of IDs for all watched currently being tracked.
+   * Returns an unmodifiable live view of the IDs currently being tracked.
+   *
+   * <p>Changes to the backing watch map are reflected in this set. Callers that need stable IDs must copy it.
+   * Iteration tolerates concurrent updates but does not provide an atomic snapshot.
    */
   public Set<Long> deltaWatchIds() {
-    return ImmutableSet.copyOf(deltaWatches.keySet());
+    return Collections.unmodifiableSet(deltaWatches.keySet());
   }
 
   /**
