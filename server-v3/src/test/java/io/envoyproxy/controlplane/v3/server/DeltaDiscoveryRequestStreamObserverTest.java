@@ -379,7 +379,6 @@ public class DeltaDiscoveryRequestStreamObserverTest {
             SnapshotResource.create(
                 RouteConfiguration.newBuilder().setName(OTHER_RESOURCE_NAME).build(), otherResourceVersion)),
         Collections.emptyList(),
-        Collections.emptyList(),
         snapshotVersion);
   }
 

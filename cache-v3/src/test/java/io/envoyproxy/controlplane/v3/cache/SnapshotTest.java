@@ -55,7 +55,6 @@ public class SnapshotTest {
         ImmutableList.of(LISTENER),
         ImmutableList.of(),
         ImmutableList.of(ROUTE),
-        ImmutableList.of(),
         ImmutableList.of(SECRET),
         version);
 
@@ -95,7 +94,6 @@ public class SnapshotTest {
         ImmutableList.of(LISTENER), listenersVersion,
         ImmutableList.of(), "",
         ImmutableList.of(ROUTE), routesVersion,
-        ImmutableList.of(), "",
         ImmutableList.of(SECRET), secretsVersion
     );
 
@@ -130,7 +128,6 @@ public class SnapshotTest {
         ImmutableList.of(LISTENER),
         ImmutableList.of(),
         ImmutableList.of(ROUTE),
-        ImmutableList.of(),
         ImmutableList.of(SECRET),
         UUID.randomUUID().toString());
 
@@ -168,7 +165,6 @@ public class SnapshotTest {
         ImmutableList.of(LISTENER),
         ImmutableList.of(),
         ImmutableList.of(ROUTE),
-        ImmutableList.of(),
         ImmutableList.of(SECRET),
         version);
 
@@ -190,7 +186,6 @@ public class SnapshotTest {
         ImmutableList.of(LISTENER),
         ImmutableList.of(),
         ImmutableList.of(ROUTE),
-        ImmutableList.of(),
         ImmutableList.of(SECRET),
         UUID.randomUUID().toString());
 
@@ -205,7 +200,6 @@ public class SnapshotTest {
         ImmutableList.of(LISTENER),
         ImmutableList.of(),
         ImmutableList.of(ROUTE),
-        ImmutableList.of(),
         ImmutableList.of(SECRET),
         UUID.randomUUID().toString());
 
@@ -221,7 +215,6 @@ public class SnapshotTest {
         ImmutableList.of(CLUSTER),
         ImmutableList.of(ENDPOINT),
         ImmutableList.of(LISTENER),
-        ImmutableList.of(),
         ImmutableList.of(),
         ImmutableList.of(),
         ImmutableList.of(SECRET),
@@ -249,7 +242,6 @@ public class SnapshotTest {
         ImmutableList.of(LISTENER),
         ImmutableList.of(),
         ImmutableList.of(ROUTE),
-        ImmutableList.of(),
         ImmutableList.of(SECRET),
         UUID.randomUUID().toString());
 
@@ -270,7 +262,6 @@ public class SnapshotTest {
         ImmutableList.of(SnapshotResource.create(
             TestResources.createRoute(otherRouteName, CLUSTER_NAME),
             UUID.randomUUID().toString())),
-        ImmutableList.of(),
         ImmutableList.of(SECRET),
         UUID.randomUUID().toString());
 

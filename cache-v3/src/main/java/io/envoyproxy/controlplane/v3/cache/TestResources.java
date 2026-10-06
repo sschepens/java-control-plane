@@ -204,24 +204,6 @@ public class TestResources {
   }
 
   /**
-   * Returns a new test virtual host.
-   *
-   * @param virtualHostName name of the new virtual host
-   * @param clusterName     name of the test cluster that is associated with this virtual host
-   */
-  public static VirtualHost createVirtualHost(String virtualHostName, String clusterName) {
-    return VirtualHost.newBuilder()
-        .setName(virtualHostName)
-        .addDomains("*")
-        .addRoutes(Route.newBuilder()
-            .setMatch(RouteMatch.newBuilder()
-                .setPrefix("/"))
-            .setRoute(RouteAction.newBuilder()
-                .setCluster(clusterName)))
-        .build();
-  }
-
-  /**
    * Returns a new test secret.
    *
    * @param secretName name of the new secret

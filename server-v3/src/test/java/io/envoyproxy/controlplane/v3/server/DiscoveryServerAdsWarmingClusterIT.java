@@ -156,8 +156,6 @@ public class DiscoveryServerAdsWarmingClusterIT {
         ImmutableList.of(SnapshotResource.create(route, "1")),
         "2",
         ImmutableList.of(),
-        "2",
-        ImmutableList.of(),
         "2");
   }
 

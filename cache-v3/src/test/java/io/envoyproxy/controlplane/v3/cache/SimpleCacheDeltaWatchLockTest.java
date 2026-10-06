@@ -101,7 +101,6 @@ public class SimpleCacheDeltaWatchLockTest {
         Collections.singletonList(SnapshotResource.create(
             RouteConfiguration.newBuilder().setName(ROUTE_NAME).build(), resourceVersion)),
         Collections.emptyList(),
-        Collections.emptyList(),
         snapshotVersion);
   }
 }

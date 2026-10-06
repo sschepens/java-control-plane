@@ -17,7 +17,6 @@ import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.ScopedRouteConfiguration;
-import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.Secret;
 import java.util.Collection;
@@ -35,7 +34,6 @@ public class Resources {
   public static final String LISTENER_TYPE_URL = "type.googleapis.com/envoy.config.listener.v3.Listener";
   public static final String ROUTE_TYPE_URL = "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
   public static final String SECRET_TYPE_URL = "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret";
-  public static final String VIRTUAL_HOST_TYPE_URL = "type.googleapis.com/envoy.config.route.v3.VirtualHost";
   public static final String SCOPED_ROUTE_TYPE_URL =
       "type.googleapis.com/envoy.config.route.v3.ScopedRouteConfiguration";
   public static final List<String> TYPE_URLS = ImmutableList.of(
@@ -44,7 +42,6 @@ public class Resources {
       LISTENER_TYPE_URL,
       SCOPED_ROUTE_TYPE_URL,
       ROUTE_TYPE_URL,
-      VIRTUAL_HOST_TYPE_URL,
       SECRET_TYPE_URL);
   public static final Map<String, Class<? extends Message>> RESOURCE_TYPE_BY_URL =
       ImmutableMap.<String, Class<? extends Message>>builder()
@@ -53,7 +50,6 @@ public class Resources {
           .put(LISTENER_TYPE_URL, Listener.class)
           .put(SCOPED_ROUTE_TYPE_URL, ScopedRouteConfiguration.class)
           .put(ROUTE_TYPE_URL, RouteConfiguration.class)
-          .put(VIRTUAL_HOST_TYPE_URL, VirtualHost.class)
           .put(SECRET_TYPE_URL, Secret.class)
           .build();
   static final String FILTER_ENVOY_ROUTER = "envoy.router";
@@ -91,10 +87,6 @@ public class Resources {
 
     if (resource instanceof ScopedRouteConfiguration) {
       return ((ScopedRouteConfiguration) resource).getName();
-    }
-
-    if (resource instanceof VirtualHost) {
-      return ((VirtualHost) resource).getName();
     }
 
     return "";

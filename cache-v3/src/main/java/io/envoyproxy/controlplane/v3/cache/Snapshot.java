@@ -6,7 +6,6 @@ import static io.envoyproxy.controlplane.v3.cache.Resources.LISTENER_TYPE_URL;
 import static io.envoyproxy.controlplane.v3.cache.Resources.ROUTE_TYPE_URL;
 import static io.envoyproxy.controlplane.v3.cache.Resources.SCOPED_ROUTE_TYPE_URL;
 import static io.envoyproxy.controlplane.v3.cache.Resources.SECRET_TYPE_URL;
-import static io.envoyproxy.controlplane.v3.cache.Resources.VIRTUAL_HOST_TYPE_URL;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Strings;
@@ -17,7 +16,6 @@ import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.ScopedRouteConfiguration;
-import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.Secret;
 import java.util.Collection;
 import java.util.Collections;
@@ -47,7 +45,6 @@ public abstract class Snapshot {
       Collection<SnapshotResource<Listener>> listeners,
       Collection<SnapshotResource<ScopedRouteConfiguration>> scopedRoutes,
       Collection<SnapshotResource<RouteConfiguration>> routes,
-      Collection<SnapshotResource<VirtualHost>> virtualHosts,
       Collection<SnapshotResource<Secret>> secrets,
       String version) {
 
@@ -57,7 +54,6 @@ public abstract class Snapshot {
         SnapshotResources.create(listeners, version, Listener::getName),
         SnapshotResources.create(scopedRoutes, version, ScopedRouteConfiguration::getName),
         SnapshotResources.create(routes, version, RouteConfiguration::getName),
-        SnapshotResources.create(virtualHosts, version, VirtualHost::getName),
         SnapshotResources.create(secrets, version, Secret::getName));
   }
 
@@ -84,8 +80,6 @@ public abstract class Snapshot {
       String scopedRoutesVersion,
       Collection<SnapshotResource<RouteConfiguration>> routes,
       String routesVersion,
-      Collection<SnapshotResource<VirtualHost>> virtualHosts,
-      String virtualHostsVersion,
       Collection<SnapshotResource<Secret>> secrets,
       String secretsVersion) {
 
@@ -96,7 +90,6 @@ public abstract class Snapshot {
         SnapshotResources.create(listeners, listenersVersion, Listener::getName),
         SnapshotResources.create(scopedRoutes, scopedRoutesVersion, ScopedRouteConfiguration::getName),
         SnapshotResources.create(routes, routesVersion, RouteConfiguration::getName),
-        SnapshotResources.create(virtualHosts, virtualHostsVersion, VirtualHost::getName),
         SnapshotResources.create(secrets, secretsVersion, Secret::getName));
   }
 
@@ -125,8 +118,6 @@ public abstract class Snapshot {
       ResourceVersionResolver scopedRouteVersionResolver,
       Collection<SnapshotResource<RouteConfiguration>> routes,
       ResourceVersionResolver routeVersionResolver,
-      Collection<SnapshotResource<VirtualHost>> virtualHosts,
-      ResourceVersionResolver virtualHostVersionResolver,
       Collection<SnapshotResource<Secret>> secrets,
       ResourceVersionResolver secretVersionResolver) {
 
@@ -136,7 +127,6 @@ public abstract class Snapshot {
         SnapshotResources.create(listeners, listenerVersionResolver, Listener::getName),
         SnapshotResources.create(scopedRoutes, scopedRouteVersionResolver, ScopedRouteConfiguration::getName),
         SnapshotResources.create(routes, routeVersionResolver, RouteConfiguration::getName),
-        SnapshotResources.create(virtualHosts, virtualHostVersionResolver, VirtualHost::getName),
         SnapshotResources.create(secrets, secretVersionResolver, Secret::getName));
   }
 
@@ -147,7 +137,6 @@ public abstract class Snapshot {
    */
   public static Snapshot createEmpty(String version) {
     return create(Collections.emptySet(),
-        Collections.emptySet(),
         Collections.emptySet(),
         Collections.emptySet(),
         Collections.emptySet(),
@@ -221,11 +210,6 @@ public abstract class Snapshot {
   public abstract SnapshotResources<RouteConfiguration> routes();
 
   /**
-   * Returns all virtual hosts items in the VHDS payload.
-   */
-  public abstract SnapshotResources<VirtualHost> virtualHosts();
-
-  /**
    * Returns all secret items in the SDS payload.
    */
   public abstract SnapshotResources<Secret> secrets();
@@ -277,8 +261,6 @@ public abstract class Snapshot {
         return (Map) scopedRoutes().resources();
       case ROUTE_TYPE_URL:
         return (Map) routes().resources();
-      case VIRTUAL_HOST_TYPE_URL:
-        return (Map) virtualHosts().resources();
       case SECRET_TYPE_URL:
         return (Map) secrets().resources();
       default:
@@ -318,8 +300,6 @@ public abstract class Snapshot {
         return scopedRoutes().version(resourceNames);
       case ROUTE_TYPE_URL:
         return routes().version(resourceNames);
-      case VIRTUAL_HOST_TYPE_URL:
-        return virtualHosts().version(resourceNames);
       case SECRET_TYPE_URL:
         return secrets().version(resourceNames);
       default:

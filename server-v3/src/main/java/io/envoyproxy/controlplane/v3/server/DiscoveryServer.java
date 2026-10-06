@@ -15,7 +15,6 @@ import io.envoyproxy.envoy.service.endpoint.v3.EndpointDiscoveryServiceGrpc.Endp
 import io.envoyproxy.envoy.service.listener.v3.ListenerDiscoveryServiceGrpc.ListenerDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.route.v3.RouteDiscoveryServiceGrpc.RouteDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.route.v3.ScopedRoutesDiscoveryServiceGrpc;
-import io.envoyproxy.envoy.service.route.v3.VirtualHostDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.secret.v3.SecretDiscoveryServiceGrpc;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
@@ -193,20 +192,6 @@ public class DiscoveryServer {
       public StreamObserver<DeltaDiscoveryRequest> deltaRoutes(
           StreamObserver<DeltaDiscoveryResponse> responseObserver) {
         return createDeltaRequestHandler(responseObserver, false, Resources.ROUTE_TYPE_URL);
-      }
-    };
-  }
-
-  /**
-   * Returns a VHDS implementation that uses this server's {@link ConfigWatcher}.
-   */
-  public VirtualHostDiscoveryServiceGrpc.VirtualHostDiscoveryServiceImplBase getVirtualHostDiscoveryServiceImpl() {
-    return new VirtualHostDiscoveryServiceGrpc.VirtualHostDiscoveryServiceImplBase() {
-      @Override
-      public StreamObserver<DeltaDiscoveryRequest> deltaVirtualHosts(
-          StreamObserver<DeltaDiscoveryResponse> responseObserver) {
-
-        return createDeltaRequestHandler(responseObserver, false, Resources.VIRTUAL_HOST_TYPE_URL);
       }
     };
   }

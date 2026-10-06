@@ -26,7 +26,6 @@ import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.ScopedRouteConfiguration;
-import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.Secret;
 import io.envoyproxy.envoy.service.cluster.v3.ClusterDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.cluster.v3.ClusterDiscoveryServiceGrpc.ClusterDiscoveryServiceStub;
@@ -79,7 +78,6 @@ public class DiscoveryServerTest {
   private static final String ROUTE_NAME = "route0";
   private static final String SECRET_NAME = "secret0";
   private static final String SCOPED_ROUTE_NAME = "scopedroute0";
-  private static final String VIRTUAL_HOST_NAME = "virtualhost0";
 
   private static final int ENDPOINT_PORT = Ports.getAvailablePort();
   private static final int LISTENER_PORT = Ports.getAvailablePort();
@@ -98,12 +96,6 @@ public class DiscoveryServerTest {
   private static final Secret SECRET = TestResources.createSecret(SECRET_NAME);
   private static final ScopedRouteConfiguration SCOPED_ROUTE =
       TestResources.createScopedRoute(SCOPED_ROUTE_NAME, ROUTE_NAME);
-  private static final VirtualHost VIRTUAL_HOST = TestResources.createVirtualHost(VIRTUAL_HOST_NAME, CLUSTER_NAME);
-
-  // VHDS has no state-of-the-world service (it is delta only), so per-type SotW streams skip it.
-  private static final List<String> SOTW_TYPE_URLS = Resources.TYPE_URLS.stream()
-      .filter(typeUrl -> !typeUrl.equals(Resources.VIRTUAL_HOST_TYPE_URL))
-      .collect(Collectors.toList());
 
   @Rule
   public final GrpcServerRule grpcServer = new GrpcServerRule().directExecutor();
@@ -116,7 +108,6 @@ public class DiscoveryServerTest {
         .put(Resources.ROUTE_TYPE_URL, VERSION, ImmutableList.of(ROUTE))
         .put(Resources.SECRET_TYPE_URL, VERSION, ImmutableList.of(SECRET))
         .put(Resources.SCOPED_ROUTE_TYPE_URL, VERSION, ImmutableList.of(SCOPED_ROUTE))
-        .put(Resources.VIRTUAL_HOST_TYPE_URL, VERSION, ImmutableList.of(VIRTUAL_HOST))
         .build();
   }
 
@@ -167,12 +158,6 @@ public class DiscoveryServerTest {
         .addResourceNames(SCOPED_ROUTE_NAME)
         .build());
 
-    requestObserver.onNext(DiscoveryRequest.newBuilder()
-        .setNode(NODE)
-        .setTypeUrl(Resources.VIRTUAL_HOST_TYPE_URL)
-        .addResourceNames(VIRTUAL_HOST_NAME)
-        .build());
-
     requestObserver.onCompleted();
 
     if (!responseObserver.completedLatch.await(1, TimeUnit.SECONDS) || responseObserver.error.get()) {
@@ -214,7 +199,7 @@ public class DiscoveryServerTest {
     ScopedRoutesDiscoveryServiceStub scopedRouteStub =
         ScopedRoutesDiscoveryServiceGrpc.newStub(grpcServer.getChannel());
 
-    for (String typeUrl : SOTW_TYPE_URLS) {
+    for (String typeUrl : Resources.TYPE_URLS) {
       MockDiscoveryResponseObserver responseObserver = new MockDiscoveryResponseObserver();
 
       StreamObserver<DiscoveryRequest> requestObserver = null;
@@ -264,7 +249,7 @@ public class DiscoveryServerTest {
           "missing expected response of type %s", typeUrl));
     }
 
-    assertThat(configWatcher.counts).hasSize(SOTW_TYPE_URLS.size());
+    assertThat(configWatcher.counts).hasSize(Resources.TYPE_URLS.size());
   }
 
   @Test
@@ -422,7 +407,7 @@ public class DiscoveryServerTest {
     ScopedRoutesDiscoveryServiceStub scopedRouteStub =
         ScopedRoutesDiscoveryServiceGrpc.newStub(grpcServer.getChannel());
 
-    for (String typeUrl : SOTW_TYPE_URLS) {
+    for (String typeUrl : Resources.TYPE_URLS) {
       MockDiscoveryResponseObserver responseObserver = new MockDiscoveryResponseObserver();
 
       StreamObserver<DiscoveryRequest> requestObserver = null;
@@ -568,12 +553,6 @@ public class DiscoveryServerTest {
         .addResourceNames(SCOPED_ROUTE_NAME)
         .build());
 
-    requestObserver.onNext(DiscoveryRequest.newBuilder()
-        .setNode(NODE)
-        .setTypeUrl(Resources.VIRTUAL_HOST_TYPE_URL)
-        .addResourceNames(VIRTUAL_HOST_NAME)
-        .build());
-
     if (!streamRequestLatch.get().await(1, TimeUnit.SECONDS)) {
       fail("failed to execute onStreamRequest callback before timeout");
     }
@@ -629,14 +608,6 @@ public class DiscoveryServerTest {
         .setResponseNonce("5")
         .setTypeUrl(Resources.SCOPED_ROUTE_TYPE_URL)
         .addResourceNames(SCOPED_ROUTE_NAME)
-        .setVersionInfo(VERSION)
-        .build());
-
-    requestObserver.onNext(DiscoveryRequest.newBuilder()
-        .setNode(NODE)
-        .setResponseNonce("6")
-        .setTypeUrl(Resources.VIRTUAL_HOST_TYPE_URL)
-        .addResourceNames(VIRTUAL_HOST_NAME)
         .setVersionInfo(VERSION)
         .build());
 
@@ -740,7 +711,7 @@ public class DiscoveryServerTest {
     ScopedRoutesDiscoveryServiceStub scopedRouteStub =
         ScopedRoutesDiscoveryServiceGrpc.newStub(grpcServer.getChannel());
 
-    for (String typeUrl : SOTW_TYPE_URLS) {
+    for (String typeUrl : Resources.TYPE_URLS) {
       MockDiscoveryResponseObserver responseObserver = new MockDiscoveryResponseObserver();
 
       StreamObserver<DiscoveryRequest> requestObserver = null;
@@ -796,11 +767,11 @@ public class DiscoveryServerTest {
 
     callbacks.assertThatNoErrors();
 
-    assertThat(callbacks.streamCloseCount).hasValue(SOTW_TYPE_URLS.size());
+    assertThat(callbacks.streamCloseCount).hasValue(Resources.TYPE_URLS.size());
     assertThat(callbacks.streamCloseWithErrorCount).hasValue(0);
-    assertThat(callbacks.streamOpenCount).hasValue(SOTW_TYPE_URLS.size());
-    assertThat(callbacks.streamRequestCount).hasValue(SOTW_TYPE_URLS.size());
-    assertThat(callbacks.streamResponseCount).hasValue(SOTW_TYPE_URLS.size());
+    assertThat(callbacks.streamOpenCount).hasValue(Resources.TYPE_URLS.size());
+    assertThat(callbacks.streamRequestCount).hasValue(Resources.TYPE_URLS.size());
+    assertThat(callbacks.streamResponseCount).hasValue(Resources.TYPE_URLS.size());
   }
 
   @Test

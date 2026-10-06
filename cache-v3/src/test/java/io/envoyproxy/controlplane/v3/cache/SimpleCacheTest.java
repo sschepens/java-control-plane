@@ -41,7 +41,6 @@ public class SimpleCacheTest {
       ImmutableList.of(SnapshotResource.create(Listener.newBuilder().setName(LISTENER_NAME).build(), "1")),
       ImmutableList.of(),
       ImmutableList.of(SnapshotResource.create(RouteConfiguration.newBuilder().setName(ROUTE_NAME).build(), "1")),
-      ImmutableList.of(),
       ImmutableList.of(SnapshotResource.create(Secret.newBuilder().setName(ROUTE_NAME).build(), "1")),
       VERSION1);
 
@@ -51,7 +50,6 @@ public class SimpleCacheTest {
       ImmutableList.of(SnapshotResource.create(Listener.newBuilder().setName(LISTENER_NAME).build(), "1")),
       ImmutableList.of(),
       ImmutableList.of(SnapshotResource.create(RouteConfiguration.newBuilder().setName(ROUTE_NAME).build(), "1")),
-      ImmutableList.of(),
       ImmutableList.of(SnapshotResource.create(Secret.newBuilder().setName(ROUTE_NAME).build(), "1")),
       VERSION2);
 
@@ -69,7 +67,6 @@ public class SimpleCacheTest {
       ImmutableList.of(SnapshotResource.create(
           RouteConfiguration.newBuilder().setName(ROUTE_NAME).build(),
           "1")),
-      ImmutableList.of(),
       ImmutableList.of(SnapshotResource.create(Secret.newBuilder().setName(ROUTE_NAME).build(), "1")),
       VERSION2);
 
@@ -265,13 +262,12 @@ public class SimpleCacheTest {
     }
 
     // Verify that CDS and LDS always get triggered before EDS and RDS respectively (SRDS sits between LDS and
-    // RDS, VHDS after RDS, as in Resources.TYPE_URLS).
+    // RDS, as in Resources.TYPE_URLS).
     assertThat(responseOrderTracker.responseTypes).containsExactly(Resources.CLUSTER_TYPE_URL,
         Resources.CLUSTER_TYPE_URL, Resources.ENDPOINT_TYPE_URL, Resources.ENDPOINT_TYPE_URL,
         Resources.LISTENER_TYPE_URL, Resources.LISTENER_TYPE_URL, Resources.SCOPED_ROUTE_TYPE_URL,
         Resources.SCOPED_ROUTE_TYPE_URL, Resources.ROUTE_TYPE_URL, Resources.ROUTE_TYPE_URL,
-        Resources.VIRTUAL_HOST_TYPE_URL, Resources.VIRTUAL_HOST_TYPE_URL, Resources.SECRET_TYPE_URL,
-        Resources.SECRET_TYPE_URL);
+        Resources.SECRET_TYPE_URL, Resources.SECRET_TYPE_URL);
   }
 
   @Test
@@ -432,7 +428,6 @@ public class SimpleCacheTest {
   public void watchIsLeftOpenIfNotRespondedImmediately() {
     SimpleCache<String> cache = new SimpleCache<>(new SingleNodeGroup());
     cache.setSnapshot(SingleNodeGroup.GROUP, Snapshot.create(
-        ImmutableList.of(),
         ImmutableList.of(),
         ImmutableList.of(),
         ImmutableList.of(),
