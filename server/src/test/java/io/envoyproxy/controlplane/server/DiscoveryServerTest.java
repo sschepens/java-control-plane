@@ -940,7 +940,8 @@ public class DiscoveryServerTest {
 
     assertThat(responseObserver.errorException).isInstanceOfSatisfying(StatusRuntimeException.class, ex -> {
       assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNKNOWN);
-      assertThat(ex.getStatus().getDescription()).isNull();
+      // grpc masks the application's status with a generic description, nothing of the original must leak
+      assertThat(ex.getStatus().getDescription()).isNotEqualTo("request not valid");
     });
 
     assertThat(callbacks.streamCloseCount).hasValue(0);

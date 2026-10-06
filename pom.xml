@@ -29,12 +29,12 @@
         <auto-value.version>1.6.3</auto-value.version>
         <awaitility.version>3.1.6</awaitility.version>
         <checkstyle.version>8.18</checkstyle.version>
-        <grpc.version>1.48.1</grpc.version>
-        <guava.version>31.1-jre</guava.version><!-- Keep the Guava version in sync with grpc-java -->
+        <grpc.version>1.84.0</grpc.version>
+        <guava.version>33.7.2-jre</guava.version><!-- Keep the Guava version in sync with grpc-java -->
         <junit.version>4.13.2</junit.version>
-        <protobuf.version>3.21.5</protobuf.version><!-- Keep the Protobuf version in sync with grpc-java -->
+        <protobuf.version>4.36.2</protobuf.version><!-- Keep the Protobuf version in sync with grpc-java -->
         <rest-assured.version>3.1.0</rest-assured.version>
-        <slf4j.version>1.7.26</slf4j.version>
+        <slf4j.version>2.0.20</slf4j.version>
         <testcontainers.version>1.17.1</testcontainers.version>
 
         <!-- Maven Plugin Versions -->
