@@ -600,7 +600,7 @@ public class SimpleCache<T> implements SnapshotCache<T> {
                                      List<String> removedResources,
                                      String version,
                                      T group) {
-    if (resources.isEmpty() && removedResources.isEmpty()) {
+    if (resources.isEmpty() && removedResources.isEmpty() && !isFirstWildcardRequest(watch)) {
       return ResponseState.UNRESPONDED;
     }
 
@@ -623,6 +623,17 @@ public class SimpleCache<T> implements SnapshotCache<T> {
     }
 
     return ResponseState.CANCELLED;
+  }
+
+  /**
+   * The first wildcard request of a stream is answered even when there is nothing to send. Envoy only completes
+   * the initialization of a wildcard type once a response arrives, so a snapshot with no resources of that type
+   * would otherwise leave it waiting for its initial fetch timeout, and on a reconnect with up-to-date versions the
+   * empty response confirms the stream is in sync. go-control-plane does the same. Later requests on the stream
+   * carry the version of the previous response and stay silent when nothing changed.
+   */
+  private static boolean isFirstWildcardRequest(DeltaWatch watch) {
+    return watch.isWildcard() && watch.version().isEmpty();
   }
 
   private enum ResponseState {
