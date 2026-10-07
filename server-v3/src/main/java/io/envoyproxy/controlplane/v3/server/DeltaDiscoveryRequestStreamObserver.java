@@ -82,7 +82,7 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
     try {
       discoverySever.callbacks.forEach(cb -> cb.onStreamDeltaRequest(streamId, completeRequest));
     } catch (RequestException e) {
-      closeWithError(e);
+      rejectStream(e);
       return;
     }
 
@@ -242,13 +242,28 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
    * that type with no watch, or with a response that is never acked, and the client would silently stop receiving
    * updates until the connection is recycled. Closing it makes the client reconnect and resync right away.
    */
-  private void failStream(String typeUrl, Throwable cause) {
-    LOGGER.error("[{}] failed to send {} response, closing stream", streamId, typeUrl, cause);
+  /**
+   * Rejects the stream for a reason of our own, such as a callback refusing a request or a request for a type we
+   * do not serve. The callbacks hear the close and its cause, as they do when the client fails the stream, and the
+   * stream is then closed with that status.
+   */
+  void rejectStream(StatusRuntimeException cause) {
+    LOGGER.warn("[{}] rejecting stream: {}", streamId, cause.getStatus());
+    notifyCloseWithError(cause);
+    closeWithError(cause);
+  }
+
+  private void notifyCloseWithError(Throwable cause) {
     try {
       discoverySever.callbacks.forEach(cb -> cb.onStreamCloseWithError(streamId, defaultTypeUrl, cause));
     } catch (RuntimeException e) {
       LOGGER.error("[{}] stream close callback failed", streamId, e);
     }
+  }
+
+  private void failStream(String typeUrl, Throwable cause) {
+    LOGGER.error("[{}] failed to send {} response, closing stream", streamId, typeUrl, cause);
+    notifyCloseWithError(cause);
     try {
       closeWithError(Status.INTERNAL
           .withDescription("failed to send " + typeUrl + " response: " + cause.getClass().getName())

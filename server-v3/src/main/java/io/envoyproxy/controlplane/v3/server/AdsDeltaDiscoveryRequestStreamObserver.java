@@ -38,7 +38,7 @@ public class AdsDeltaDiscoveryRequestStreamObserver extends DeltaDiscoveryReques
   @Override
   public void onNext(DeltaDiscoveryRequest request) {
     if (request.getTypeUrl().isEmpty()) {
-      closeWithError(
+      rejectStream(
           Status.UNKNOWN
               .withDescription(String.format("[%d] type URL is required for ADS", streamId))
               .asRuntimeException());

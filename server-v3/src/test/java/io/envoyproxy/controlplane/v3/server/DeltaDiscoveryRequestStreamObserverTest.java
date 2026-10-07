@@ -7,6 +7,7 @@ import com.google.rpc.Status;
 import io.envoyproxy.controlplane.v3.cache.SimpleCache;
 import io.envoyproxy.controlplane.v3.cache.Snapshot;
 import io.envoyproxy.controlplane.v3.cache.SnapshotResource;
+import io.envoyproxy.controlplane.v3.server.exception.RequestException;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest;
@@ -380,6 +381,33 @@ public class DeltaDiscoveryRequestStreamObserverTest {
                 RouteConfiguration.newBuilder().setName(OTHER_RESOURCE_NAME).build(), otherResourceVersion)),
         Collections.emptyList(),
         snapshotVersion);
+  }
+
+  @Test
+  public void callbackRefusingARequestClosesTheStreamAndTellsTheCallbacks() throws Exception {
+    List<Throwable> closeCauses = new ArrayList<>();
+    DiscoveryServerCallbacks callbacks = new DiscoveryServerCallbacks() {
+      @Override
+      public void onStreamDeltaRequest(long streamId, DeltaDiscoveryRequest request) {
+        throw new RequestException(io.grpc.Status.PERMISSION_DENIED.withDescription("node not allowed"));
+      }
+
+      @Override
+      public void onStreamCloseWithError(long streamId, String typeUrl, Throwable error) {
+        closeCauses.add(error);
+      }
+    };
+    observer = newObserver(new DiscoveryServer(callbacks, cache));
+
+    send(request().addResourceNamesSubscribe(RESOURCE_NAME));
+
+    assertThat(responses).isEmpty();
+    assertThat(closeCauses).hasSize(1);
+    assertThat(io.grpc.Status.fromThrowable(closeCauses.get(0)).getCode())
+        .isEqualTo(io.grpc.Status.Code.PERMISSION_DENIED);
+    assertThat(errors).hasSize(1);
+    assertThat(io.grpc.Status.fromThrowable(errors.remove(0)).getCode())
+        .isEqualTo(io.grpc.Status.Code.PERMISSION_DENIED);
   }
 
   private DeltaDiscoveryRequest.Builder request() {

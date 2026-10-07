@@ -215,6 +215,25 @@ public class DiscoveryServer {
     };
   }
 
+  /**
+   * Tells the callbacks the stream opened. If one of them refuses it by throwing, the ones that already saw it open
+   * hear it close with the cause before the exception reaches grpc, which fails the call.
+   */
+  private void openStream(long streamId, String defaultTypeUrl) {
+    try {
+      callbacks.forEach(cb -> cb.onStreamOpen(streamId, defaultTypeUrl));
+    } catch (RuntimeException e) {
+      callbacks.forEach(cb -> {
+        try {
+          cb.onStreamCloseWithError(streamId, defaultTypeUrl, e);
+        } catch (RuntimeException closeError) {
+          LOGGER.error("[{}] stream close callback failed", streamId, closeError);
+        }
+      });
+      throw e;
+    }
+  }
+
   private StreamObserver<DiscoveryRequest> createRequestHandler(
       StreamObserver<DiscoveryResponse> responseObserver,
       boolean ads,
@@ -225,7 +244,7 @@ public class DiscoveryServer {
 
     LOGGER.debug("[{}] open stream from {}", streamId, defaultTypeUrl);
 
-    callbacks.forEach(cb -> cb.onStreamOpen(streamId, defaultTypeUrl));
+    openStream(streamId, defaultTypeUrl);
 
     final DiscoveryRequestStreamObserver requestStreamObserver;
     if (ads) {
@@ -262,7 +281,7 @@ public class DiscoveryServer {
 
     LOGGER.debug("[{}] open stream from {}", streamId, defaultTypeUrl);
 
-    callbacks.forEach(cb -> cb.onStreamOpen(streamId, defaultTypeUrl));
+    openStream(streamId, defaultTypeUrl);
 
     final DeltaDiscoveryRequestStreamObserver requestStreamObserver;
     if (ads) {

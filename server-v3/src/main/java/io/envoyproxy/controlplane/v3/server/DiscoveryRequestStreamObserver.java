@@ -69,7 +69,7 @@ public abstract class DiscoveryRequestStreamObserver implements StreamObserver<D
     try {
       discoverySever.callbacks.forEach(cb -> cb.onStreamRequest(streamId, request));
     } catch (RequestException e) {
-      closeWithError(e);
+      rejectStream(e);
       return;
     }
 
@@ -125,6 +125,25 @@ public abstract class DiscoveryRequestStreamObserver implements StreamObserver<D
   void onCancelled() {
     LOGGER.info("[{}] stream cancelled", streamId);
     cancel();
+  }
+
+  /**
+   * Rejects the stream for a reason of our own, such as a callback refusing a request or a request for a type we
+   * do not serve. The callbacks hear the close and its cause, as they do when the client fails the stream, and the
+   * stream is then closed with that status.
+   */
+  void rejectStream(StatusRuntimeException cause) {
+    LOGGER.warn("[{}] rejecting stream: {}", streamId, cause.getStatus());
+    notifyCloseWithError(cause);
+    closeWithError(cause);
+  }
+
+  private void notifyCloseWithError(Throwable cause) {
+    try {
+      discoverySever.callbacks.forEach(cb -> cb.onStreamCloseWithError(streamId, defaultTypeUrl, cause));
+    } catch (RuntimeException e) {
+      LOGGER.error("[{}] stream close callback failed", streamId, e);
+    }
   }
 
   void closeWithError(Throwable exception) {

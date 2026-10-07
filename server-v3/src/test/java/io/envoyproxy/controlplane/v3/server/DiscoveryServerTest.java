@@ -962,10 +962,43 @@ public class DiscoveryServerTest {
     });
 
     assertThat(callbacks.streamCloseCount).hasValue(0);
-    assertThat(callbacks.streamCloseWithErrorCount).hasValue(0);
+    // the server rejected the stream, so the callbacks hear it close with the request's status as the cause
+    assertThat(callbacks.streamCloseWithErrorCount).hasValue(1);
     assertThat(callbacks.streamOpenCount).hasValue(1);
     assertThat(callbacks.streamRequestCount).hasValue(1);
     assertThat(callbacks.streamResponseCount).hasValue(0);
+  }
+
+  @Test
+  public void testOnStreamOpenRefusedNotifiesTheOtherCallbacks() throws InterruptedException {
+    MockDiscoveryServerCallbacks callbacks = new MockDiscoveryServerCallbacks();
+    DiscoveryServerCallbacks refusing = new DiscoveryServerCallbacks() {
+      @Override
+      public void onStreamOpen(long streamId, String typeUrl) {
+        throw new IllegalStateException("stream refused");
+      }
+    };
+
+    MockConfigWatcher configWatcher = new MockConfigWatcher(false, createResponses());
+    DiscoveryServer server = new DiscoveryServer(List.of(callbacks, refusing), configWatcher);
+
+    grpcServer.getServiceRegistry().addService(server.getAggregatedDiscoveryServiceImpl());
+    AggregatedDiscoveryServiceStub stub = AggregatedDiscoveryServiceGrpc.newStub(grpcServer.getChannel());
+
+    MockDiscoveryResponseObserver responseObserver = new MockDiscoveryResponseObserver();
+    stub.streamAggregatedResources(responseObserver);
+
+    if (!responseObserver.errorLatch.await(1, TimeUnit.SECONDS) || responseObserver.completed.get()) {
+      fail(format("failed to error before timeout, completed = %b", responseObserver.completed.get()));
+    }
+
+    callbacks.assertThatNoErrors();
+
+    // the callback that saw the stream open also sees it close, with the refusal as the cause
+    assertThat(callbacks.streamOpenCount).hasValue(1);
+    assertThat(callbacks.streamCloseWithErrorCount).hasValue(1);
+    assertThat(callbacks.streamCloseCount).hasValue(0);
+    assertThat(callbacks.streamRequestCount).hasValue(0);
   }
 
   @Test
