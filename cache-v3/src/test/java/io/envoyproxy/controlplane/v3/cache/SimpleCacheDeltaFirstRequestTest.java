@@ -1,15 +1,18 @@
 package io.envoyproxy.controlplane.v3.cache;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.service.discovery.v3.DeltaDiscoveryRequest;
+import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.Test;
 
 /**
@@ -92,6 +95,20 @@ public class SimpleCacheDeltaFirstRequestTest {
     assertThat(responses).hasSize(1);
     assertThat(responses.get(0).resources()).isEmpty();
     assertThat(responses.get(0).version()).isEqualTo("1");
+  }
+
+  @Test
+  public void rejectsRequestsForATypeTheCacheDoesNotServe() {
+    cache.setSnapshot(GROUP, snapshot(List.of(CLUSTER), List.of(ENDPOINT), "1"));
+    String virtualHosts = "type.googleapis.com/envoy.config.route.v3.VirtualHost";
+
+    assertThatThrownBy(() -> cache.createDeltaWatch(request(virtualHosts, Map.of()), "", new TrackedResources(), false,
+        responses::add, false))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> cache.createWatch(true,
+        DiscoveryRequest.newBuilder().setNode(NODE).setTypeUrl(virtualHosts).build(), Set.of(), response -> { }))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(responses).isEmpty();
   }
 
   private static DeltaDiscoveryRequest request(String typeUrl, Map<String, String> initialResourceVersions) {

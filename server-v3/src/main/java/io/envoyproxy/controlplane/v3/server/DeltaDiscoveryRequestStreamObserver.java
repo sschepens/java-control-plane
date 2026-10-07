@@ -2,6 +2,7 @@ package io.envoyproxy.controlplane.v3.server;
 
 import io.envoyproxy.controlplane.v3.cache.DeltaResponse;
 import io.envoyproxy.controlplane.v3.cache.DeltaWatch;
+import io.envoyproxy.controlplane.v3.cache.Resources;
 import io.envoyproxy.controlplane.v3.cache.TrackedResources;
 import io.envoyproxy.controlplane.v3.server.exception.RequestException;
 import io.envoyproxy.envoy.config.core.v3.Node;
@@ -54,6 +55,12 @@ public abstract class DeltaDiscoveryRequestStreamObserver implements StreamObser
   @Override
   public void onNext(DeltaDiscoveryRequest request) {
     String requestTypeUrl = request.getTypeUrl().isEmpty() ? defaultTypeUrl : request.getTypeUrl();
+    if (!Resources.TYPE_URLS.contains(requestTypeUrl)) {
+      rejectStream(Status.INVALID_ARGUMENT
+          .withDescription(String.format("[%d] unsupported type URL %s", streamId, requestTypeUrl))
+          .asRuntimeException());
+      return;
+    }
     if (node == null && request.hasNode()) {
       node = request.getNode();
     }

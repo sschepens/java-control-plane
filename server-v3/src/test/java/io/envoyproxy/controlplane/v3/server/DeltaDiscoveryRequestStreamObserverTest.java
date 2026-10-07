@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -408,6 +409,27 @@ public class DeltaDiscoveryRequestStreamObserverTest {
     assertThat(errors).hasSize(1);
     assertThat(io.grpc.Status.fromThrowable(errors.remove(0)).getCode())
         .isEqualTo(io.grpc.Status.Code.PERMISSION_DENIED);
+  }
+
+  @Test
+  public void requestForATypeTheServerDoesNotServeClosesTheStream() throws Exception {
+    Assume.assumeTrue("only an aggregated stream can name an arbitrary type", ads);
+    List<Long> closedStreams = new ArrayList<>();
+    DiscoveryServerCallbacks callbacks = new DiscoveryServerCallbacks() {
+      @Override
+      public void onStreamCloseWithError(long streamId, String typeUrl, Throwable error) {
+        closedStreams.add(streamId);
+      }
+    };
+    observer = newObserver(new DiscoveryServer(callbacks, cache));
+
+    send(request().setTypeUrl("type.googleapis.com/envoy.config.route.v3.VirtualHost"));
+
+    assertThat(responses).isEmpty();
+    assertThat(closedStreams).containsExactly(1L);
+    assertThat(errors).hasSize(1);
+    assertThat(io.grpc.Status.fromThrowable(errors.remove(0)).getCode())
+        .isEqualTo(io.grpc.Status.Code.INVALID_ARGUMENT);
   }
 
   private DeltaDiscoveryRequest.Builder request() {

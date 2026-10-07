@@ -1,5 +1,7 @@
 package io.envoyproxy.controlplane.v3.cache;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.protobuf.Message;
@@ -111,6 +113,8 @@ public class SimpleCache<T> implements SnapshotCache<T> {
       Consumer<Response> responseConsumer,
       boolean hasClusterChanged) {
 
+    checkArgument(request.getTypeUrl().isEmpty() || Resources.TYPE_URLS.contains(request.getTypeUrl()),
+        "unsupported type URL %s", request.getTypeUrl());
     T group = groups.hash(request.getNode());
     // even though we're modifying, we take a readLock to allow multiple watches to be created in parallel since it
     // doesn't conflict
@@ -214,6 +218,8 @@ public class SimpleCache<T> implements SnapshotCache<T> {
                                             boolean isWildcard,
                                             Consumer<DeltaResponse> responseConsumer,
                                             boolean hasClusterChanged) {
+    checkArgument(request.getTypeUrl().isEmpty() || Resources.TYPE_URLS.contains(request.getTypeUrl()),
+        "unsupported type URL %s", request.getTypeUrl());
     T group = groups.hash(request.getNode());
     // even though we're modifying, we take a readLock to allow multiple watches to be created in parallel since it
     // doesn't conflict

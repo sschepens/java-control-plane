@@ -55,6 +55,12 @@ public abstract class DiscoveryRequestStreamObserver implements StreamObserver<D
   @Override
   public void onNext(DiscoveryRequest request) {
     String requestTypeUrl = request.getTypeUrl().isEmpty() ? defaultTypeUrl : request.getTypeUrl();
+    if (!Resources.TYPE_URLS.contains(requestTypeUrl)) {
+      rejectStream(Status.INVALID_ARGUMENT
+          .withDescription(String.format("[%d] unsupported type URL %s", streamId, requestTypeUrl))
+          .asRuntimeException());
+      return;
+    }
     String nonce = request.getResponseNonce();
 
     if (LOGGER.isDebugEnabled()) {
